@@ -6,7 +6,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * Copyright (C) 2022-2025 Oryx Embedded SARL. All rights reserved.
+ * Copyright (C) 2022-2026 Oryx Embedded SARL. All rights reserved.
  *
  * This file is part of CycloneIPSEC Open.
  *
@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.5.4
+ * @version 2.6.0
  **/
 
 //Switch to the appropriate trace level
@@ -310,7 +310,7 @@ error_t ikeParseKePayload(IkeSaEntry *sa, const IkeKePayload *kePayload)
 {
    error_t error;
    size_t n;
-   uint16_t dhGroupNum;
+   uint16_t groupNum;
 
    //Retrieve the length of the Key Exchange payload
    n = ntohs(kePayload->header.payloadLength);
@@ -322,12 +322,12 @@ error_t ikeParseKePayload(IkeSaEntry *sa, const IkeKePayload *kePayload)
    //Determine the length of the key exchange data
    n -= sizeof(IkeKePayload);
 
-   //The Diffie-Hellman Group Num identifies the Diffie-Hellman group in
-   //which the Key Exchange Data was computed
-   dhGroupNum = ntohs(kePayload->dhGroupNum);
+   //The Key Exchange Method identifies the Diffie-Hellman group in which the
+   //Key Exchange Data was computed
+   groupNum = ntohs(kePayload->keyExchangeMethod);
 
-   //Make sure the Diffie-Hellman group is acceptable
-   if(dhGroupNum != sa->dhGroupNum)
+   //Make sure the key exchange method is acceptable
+   if(groupNum != sa->groupNum)
       return ERROR_INVALID_GROUP;
 
    //Parse peer's Diffie-Hellman public key
@@ -563,7 +563,7 @@ error_t ikeParseInvalidKeyPayloadNotification(IkeSaEntry *sa,
    const IkeNotifyPayload *notifyPayload)
 {
    size_t n;
-   uint16_t dhGroupNum;
+   uint16_t groupNum;
    const uint8_t *data;
 
    //Retrieve the length of the notification data
@@ -579,14 +579,14 @@ error_t ikeParseInvalidKeyPayloadNotification(IkeSaEntry *sa,
 
    //The Diffie-Hellman group number is encoded in big endian order (refer to
    //RFC 7296, section 1.3)
-   dhGroupNum = LOAD16BE(data);
+   groupNum = LOAD16BE(data);
 
-   //Ensure the specified group number is supported
-   if(!ikeIsDhGroupSupported(dhGroupNum))
+   //Ensure the specified key exchange method is supported
+   if(!ikeIsGroupSupported(groupNum))
       return ERROR_INVALID_GROUP;
 
-   //Save the corrected Diffie-Hellman group number
-   sa->dhGroupNum = dhGroupNum;
+   //Save the corrected group number
+   sa->groupNum = groupNum;
 
    //Successful processing
    return NO_ERROR;

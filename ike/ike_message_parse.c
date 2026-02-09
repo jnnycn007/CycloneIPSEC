@@ -6,7 +6,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * Copyright (C) 2022-2025 Oryx Embedded SARL. All rights reserved.
+ * Copyright (C) 2022-2026 Oryx Embedded SARL. All rights reserved.
  *
  * This file is part of CycloneIPSEC Open.
  *
@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.5.4
+ * @version 2.6.0
  **/
 
 //Switch to the appropriate trace level
@@ -1023,8 +1023,8 @@ error_t ikeProcessIkeAuthRequest(IkeSaEntry *sa, const uint8_t *message,
       }
 
       //Perform lookup in the PAD database based on the ID
-      padEntry = ipsecFindPadEntry(netContext.ipsecContext, sa->peerIdType,
-         sa->peerId, sa->peerIdLen);
+      padEntry = ipsecFindPadEntry(sa->context->netContext->ipsecContext,
+         sa->peerIdType, sa->peerId, sa->peerIdLen);
 
       //All errors causing the authentication to fail for whatever reason
       //(invalid shared secret, invalid ID, untrusted certificate issuer,
@@ -1309,8 +1309,8 @@ error_t ikeProcessIkeAuthResponse(IkeSaEntry *sa, const uint8_t *message,
       }
 
       //Perform lookup in the PAD database based on the ID
-      padEntry = ipsecFindPadEntry(netContext.ipsecContext, sa->peerIdType,
-         sa->peerId, sa->peerIdLen);
+      padEntry = ipsecFindPadEntry(sa->context->netContext->ipsecContext,
+         sa->peerIdType, sa->peerId, sa->peerIdLen);
       //Invalid ID?
       if(padEntry == NULL)
       {

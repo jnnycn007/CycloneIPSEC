@@ -6,7 +6,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * Copyright (C) 2022-2025 Oryx Embedded SARL. All rights reserved.
+ * Copyright (C) 2022-2026 Oryx Embedded SARL. All rights reserved.
  *
  * This file is part of CycloneIPSEC Open.
  *
@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.5.4
+ * @version 2.6.0
  **/
 
 //Switch to the appropriate trace level
@@ -47,6 +47,9 @@
 
 void ipsecGetDefaultSettings(IpsecSettings *settings)
 {
+   //TCP/IP stack context
+   settings->netContext = NULL;
+
    //Pseudo-random number generator
    settings->prngAlgo = NULL;
    settings->prngContext = NULL;
@@ -98,6 +101,16 @@ error_t ipsecInit(IpsecContext *context, const IpsecSettings *settings)
    //Clear the IPsec context
    osMemset(context, 0, sizeof(IpsecContext));
 
+   //Attach TCP/IP stack context
+   if(settings->netContext != NULL)
+   {
+      context->netContext = settings->netContext;
+   }
+   else
+   {
+      context->netContext = netGetDefaultContext();
+   }
+
    //Pseudo-random number generator
    context->prngAlgo = settings->prngAlgo;
    context->prngContext = settings->prngContext;
@@ -114,8 +127,12 @@ error_t ipsecInit(IpsecContext *context, const IpsecSettings *settings)
    context->pad = settings->padEntries;
    context->numPadEntries = settings->numPadEntries;
 
+   //Get exclusive access
+   netLock(context->netContext);
    //Attach IPsec context
-   netContext.ipsecContext = context;
+   context->netContext->ipsecContext = context;
+   //Release exclusive access
+   netUnlock(context->netContext);
 
    //Sucessful processing
    return NO_ERROR;
@@ -367,6 +384,34 @@ error_t ipsecClearPadEntry(IpsecContext *context, uint_t index)
 
    //Sucessful processing
    return NO_ERROR;
+}
+
+
+/**
+ * @brief Release IPsec context
+ * @param[in] context Pointer to the IPsec context
+ **/
+
+void ipsecDeinit(IpsecContext *context)
+{
+   NetContext *netContext;
+
+   //Make sure the IPsec context is valid
+   if(context != NULL)
+   {
+      //Point to the TCP/IP stack context
+      netContext = context->netContext;
+
+      //Get exclusive access
+      netLock(netContext);
+      //Detach the IPsec context
+      netContext->ipsecContext = NULL;
+      //Release exclusive access
+      netUnlock(netContext);
+
+      //Clear IPsec context
+      osMemset(context, 0, sizeof(IpsecContext));
+   }
 }
 
 #endif

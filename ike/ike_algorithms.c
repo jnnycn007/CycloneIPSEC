@@ -6,7 +6,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * Copyright (C) 2022-2025 Oryx Embedded SARL. All rights reserved.
+ * Copyright (C) 2022-2026 Oryx Embedded SARL. All rights reserved.
  *
  * This file is part of CycloneIPSEC Open.
  *
@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.5.4
+ * @version 2.6.0
  **/
 
 //Switch to the appropriate trace level
@@ -46,94 +46,94 @@
 
 
 /**
- * @brief List of supported key exchange algorithms
+ * @brief List of supported key exchange methods
  **/
 
 static const uint16_t ikeSupportedKeAlgos[] =
 {
 #if (IKE_ECDH_KE_SUPPORT == ENABLED && IKE_CURVE25519_SUPPORT == ENABLED)
    //Curve25519 elliptic curve
-   IKE_TRANSFORM_ID_DH_GROUP_CURVE25519,
+   IKE_TRANSFORM_ID_KE_CURVE25519,
 #endif
 #if (IKE_ECDH_KE_SUPPORT == ENABLED && IKE_CURVE448_SUPPORT == ENABLED)
    //Curve448 elliptic curve
-   IKE_TRANSFORM_ID_DH_GROUP_CURVE448,
+   IKE_TRANSFORM_ID_KE_CURVE448,
 #endif
 #if (IKE_ECDH_KE_SUPPORT == ENABLED && IKE_ECP_256_SUPPORT == ENABLED)
    //NIST P-256 elliptic curve
-   IKE_TRANSFORM_ID_DH_GROUP_ECP_256,
+   IKE_TRANSFORM_ID_KE_ECP_256,
 #endif
 #if (IKE_ECDH_KE_SUPPORT == ENABLED && IKE_ECP_384_SUPPORT == ENABLED)
    //NIST P-384 elliptic curve
-   IKE_TRANSFORM_ID_DH_GROUP_ECP_384,
+   IKE_TRANSFORM_ID_KE_ECP_384,
 #endif
 #if (IKE_ECDH_KE_SUPPORT == ENABLED && IKE_ECP_521_SUPPORT == ENABLED)
    //NIST P-521 elliptic curve
-   IKE_TRANSFORM_ID_DH_GROUP_ECP_521,
+   IKE_TRANSFORM_ID_KE_ECP_521,
 #endif
 #if (IKE_ECDH_KE_SUPPORT == ENABLED && IKE_ECP_224_SUPPORT == ENABLED)
    //NIST P-224 elliptic curve
-   IKE_TRANSFORM_ID_DH_GROUP_ECP_224,
+   IKE_TRANSFORM_ID_KE_ECP_224,
 #endif
 #if (IKE_ECDH_KE_SUPPORT == ENABLED && IKE_ECP_192_SUPPORT == ENABLED)
    //NIST P-192 elliptic curve
-   IKE_TRANSFORM_ID_DH_GROUP_ECP_192,
+   IKE_TRANSFORM_ID_KE_ECP_192,
 #endif
 #if (IKE_ECDH_KE_SUPPORT == ENABLED && IKE_BRAINPOOLP256R1_SUPPORT == ENABLED)
    //brainpoolP256r1 elliptic curve
-   IKE_TRANSFORM_ID_DH_GROUP_BRAINPOOLP256R1,
+   IKE_TRANSFORM_ID_KE_BRAINPOOLP256R1,
 #endif
 #if (IKE_ECDH_KE_SUPPORT == ENABLED && IKE_BRAINPOOLP384R1_SUPPORT == ENABLED)
    //brainpoolP384r1 elliptic curve
-   IKE_TRANSFORM_ID_DH_GROUP_BRAINPOOLP384R1,
+   IKE_TRANSFORM_ID_KE_BRAINPOOLP384R1,
 #endif
 #if (IKE_ECDH_KE_SUPPORT == ENABLED && IKE_BRAINPOOLP512R1_SUPPORT == ENABLED)
    //brainpoolP512r1 elliptic curve
-   IKE_TRANSFORM_ID_DH_GROUP_BRAINPOOLP512R1,
+   IKE_TRANSFORM_ID_KE_BRAINPOOLP512R1,
 #endif
 #if (IKE_ECDH_KE_SUPPORT == ENABLED && IKE_BRAINPOOLP224R1_SUPPORT == ENABLED)
    //brainpoolP224r1 elliptic curve
-   IKE_TRANSFORM_ID_DH_GROUP_BRAINPOOLP224R1,
+   IKE_TRANSFORM_ID_KE_BRAINPOOLP224R1,
 #endif
 #if (IKE_DH_KE_SUPPORT == ENABLED && IKE_MAX_DH_MODULUS_SIZE >= 2048 && \
    IKE_MIN_DH_MODULUS_SIZE <= 2048)
    //Diffie-Hellman group 14
-   IKE_TRANSFORM_ID_DH_GROUP_MODP_2048,
+   IKE_TRANSFORM_ID_KE_MODP_2048,
 #endif
 #if (IKE_DH_KE_SUPPORT == ENABLED && IKE_MAX_DH_MODULUS_SIZE >= 3072 && \
    IKE_MIN_DH_MODULUS_SIZE <= 3072)
    //Diffie-Hellman group 15
-   IKE_TRANSFORM_ID_DH_GROUP_MODP_3072,
+   IKE_TRANSFORM_ID_KE_MODP_3072,
 #endif
 #if (IKE_DH_KE_SUPPORT == ENABLED && IKE_MAX_DH_MODULUS_SIZE >= 4096 && \
    IKE_MIN_DH_MODULUS_SIZE <= 4096)
    //Diffie-Hellman group 16
-   IKE_TRANSFORM_ID_DH_GROUP_MODP_4096,
+   IKE_TRANSFORM_ID_KE_MODP_4096,
 #endif
 #if (IKE_DH_KE_SUPPORT == ENABLED && IKE_MAX_DH_MODULUS_SIZE >= 6144 && \
    IKE_MIN_DH_MODULUS_SIZE <= 6144)
    //Diffie-Hellman group 17
-   IKE_TRANSFORM_ID_DH_GROUP_MODP_6144,
+   IKE_TRANSFORM_ID_KE_MODP_6144,
 #endif
 #if (IKE_DH_KE_SUPPORT == ENABLED && IKE_MAX_DH_MODULUS_SIZE >= 8192 && \
    IKE_MIN_DH_MODULUS_SIZE <= 8192)
    //Diffie-Hellman group 18
-   IKE_TRANSFORM_ID_DH_GROUP_MODP_8192,
+   IKE_TRANSFORM_ID_KE_MODP_8192,
 #endif
 #if (IKE_DH_KE_SUPPORT == ENABLED && IKE_MAX_DH_MODULUS_SIZE >= 1536 && \
    IKE_MIN_DH_MODULUS_SIZE <= 1536)
    //Diffie-Hellman group 5
-   IKE_TRANSFORM_ID_DH_GROUP_MODP_1536,
+   IKE_TRANSFORM_ID_KE_MODP_1536,
 #endif
 #if (IKE_DH_KE_SUPPORT == ENABLED && IKE_MAX_DH_MODULUS_SIZE >= 1024 && \
    IKE_MIN_DH_MODULUS_SIZE <= 1024)
    //Diffie-Hellman group 2
-   IKE_TRANSFORM_ID_DH_GROUP_MODP_1024,
+   IKE_TRANSFORM_ID_KE_MODP_1024,
 #endif
 #if (IKE_DH_KE_SUPPORT == ENABLED && IKE_MAX_DH_MODULUS_SIZE >= 768 && \
    IKE_MIN_DH_MODULUS_SIZE <= 768)
    //Diffie-Hellman group 1
-   IKE_TRANSFORM_ID_DH_GROUP_MODP_768,
+   IKE_TRANSFORM_ID_KE_MODP_768,
 #endif
 };
 
@@ -1284,7 +1284,7 @@ error_t ikeAddSupportedKeTransforms(IkeContext *context,
    for(i = 0; i < arraysize(ikeSupportedKeAlgos) && !error; i++)
    {
       //Add a new transform to the proposal
-      error = ikeAddTransform(IKE_TRANSFORM_TYPE_DH,
+      error = ikeAddTransform(IKE_TRANSFORM_TYPE_KE,
          ikeSupportedKeAlgos[i], 0, proposal, lastSubstruc);
    }
 
@@ -1481,9 +1481,9 @@ uint16_t ikeSelectTransform(IkeTransformType transformType,
    found = FALSE;
 
    //Key exchange transform negotiation?
-   if(transformType == IKE_TRANSFORM_TYPE_DH)
+   if(transformType == IKE_TRANSFORM_TYPE_KE)
    {
-      selectedAlgo = IKE_TRANSFORM_ID_DH_GROUP_NONE;
+      selectedAlgo = IKE_TRANSFORM_ID_KE_NONE;
    }
    else
    {
@@ -1560,7 +1560,7 @@ uint16_t ikeSelectKeTransform(IkeContext *context, const IkeProposal *proposal,
    size_t proposalLen)
 {
    //Select the key exchange transform to use
-   return ikeSelectTransform(IKE_TRANSFORM_TYPE_DH, ikeSupportedKeAlgos,
+   return ikeSelectTransform(IKE_TRANSFORM_TYPE_KE, ikeSupportedKeAlgos,
       arraysize(ikeSupportedKeAlgos), proposal, proposalLen);
 }
 
@@ -1734,7 +1734,7 @@ error_t ikeSelectSaProposal(IkeSaEntry *sa, const IkeSaPayload *payload,
    const IkeEncAlgo *encAlgo;
 
    //Clear the set of parameters
-   sa->dhGroupNum = IKE_TRANSFORM_ID_DH_GROUP_NONE;
+   sa->groupNum = IKE_TRANSFORM_ID_KE_NONE;
    sa->prfAlgoId = IKE_TRANSFORM_ID_INVALID;
    sa->encAlgoId = IKE_TRANSFORM_ID_INVALID;
    sa->encKeyLen = 0;
@@ -1787,7 +1787,7 @@ error_t ikeSelectSaProposal(IkeSaEntry *sa, const IkeSaPayload *payload,
          proposal->spiSize == spiSize)
       {
          //Key exchange transform negotiation
-         sa->dhGroupNum = ikeSelectKeTransform(sa->context, proposal, n);
+         sa->groupNum = ikeSelectKeTransform(sa->context, proposal, n);
          //PRF transform negotiation
          sa->prfAlgoId = ikeSelectPrfTransform(sa->context, proposal, n);
          //Encryption transform negotiation
@@ -1820,7 +1820,7 @@ error_t ikeSelectSaProposal(IkeSaEntry *sa, const IkeSaPayload *payload,
          }
 
          //Valid proposal?
-         if(sa->dhGroupNum != IKE_TRANSFORM_ID_DH_GROUP_NONE &&
+         if(sa->groupNum != IKE_TRANSFORM_ID_KE_NONE &&
             sa->prfAlgoId != IKE_TRANSFORM_ID_INVALID &&
             sa->encAlgoId != IKE_TRANSFORM_ID_INVALID &&
             sa->authAlgoId != IKE_TRANSFORM_ID_INVALID)
@@ -1964,15 +1964,15 @@ error_t ikeCheckSaProposal(IkeSaEntry *sa, const IkeSaPayload *payload)
 
    //The accepted cryptographic suite must contain exactly one transform of
    //each type included in the proposal (refer to RFC 7296, section 2.7)
-   if(ikeGetNumTransforms(IKE_TRANSFORM_TYPE_DH, proposal, n) != 1 ||
+   if(ikeGetNumTransforms(IKE_TRANSFORM_TYPE_KE, proposal, n) != 1 ||
       ikeGetNumTransforms(IKE_TRANSFORM_TYPE_PRF, proposal, n) != 1 ||
       ikeGetNumTransforms(IKE_TRANSFORM_TYPE_ENCR, proposal, n) != 1)
    {
       return ERROR_INVALID_PROPOSAL;
    }
 
-   //Make sure the selected Diffie-Hellman group is acceptable
-   if(ikeSelectKeTransform(sa->context, proposal, n) != sa->dhGroupNum)
+   //Make sure the selected key exchange method is acceptable
+   if(ikeSelectKeTransform(sa->context, proposal, n) != sa->groupNum)
       return ERROR_INVALID_PROPOSAL;
 
    //Get the selected PRF transform
@@ -2012,7 +2012,7 @@ error_t ikeCheckSaProposal(IkeSaEntry *sa, const IkeSaPayload *payload)
    //The initiator of an exchange must check that the accepted offer is
    //consistent with one of its proposals, and if not must terminate the
    //exchange (refer to RFC 7296, section 3.3.6)
-   if(sa->dhGroupNum != IKE_TRANSFORM_ID_DH_GROUP_NONE &&
+   if(sa->groupNum != IKE_TRANSFORM_ID_KE_NONE &&
       sa->prfAlgoId != IKE_TRANSFORM_ID_INVALID &&
       sa->encAlgoId != IKE_TRANSFORM_ID_INVALID &&
       sa->authAlgoId != IKE_TRANSFORM_ID_INVALID)
@@ -2132,17 +2132,17 @@ bool_t ikeIsVariableLengthKeyEncAlgo(uint16_t encAlgoId)
 bool_t ikeIsDhKeyExchangeAlgo(uint16_t groupNum)
 {
    //Diffie-Hellman key exchange?
-   if(groupNum == IKE_TRANSFORM_ID_DH_GROUP_MODP_768 ||
-      groupNum == IKE_TRANSFORM_ID_DH_GROUP_MODP_1024 ||
-      groupNum == IKE_TRANSFORM_ID_DH_GROUP_MODP_1536 ||
-      groupNum == IKE_TRANSFORM_ID_DH_GROUP_MODP_2048 ||
-      groupNum == IKE_TRANSFORM_ID_DH_GROUP_MODP_3072 ||
-      groupNum == IKE_TRANSFORM_ID_DH_GROUP_MODP_4096 ||
-      groupNum == IKE_TRANSFORM_ID_DH_GROUP_MODP_6144 ||
-      groupNum == IKE_TRANSFORM_ID_DH_GROUP_MODP_8192 ||
-      groupNum == IKE_TRANSFORM_ID_DH_GROUP_MODP_1024_160 ||
-      groupNum == IKE_TRANSFORM_ID_DH_GROUP_MODP_2048_224 ||
-      groupNum == IKE_TRANSFORM_ID_DH_GROUP_MODP_2048_256)
+   if(groupNum == IKE_TRANSFORM_ID_KE_MODP_768 ||
+      groupNum == IKE_TRANSFORM_ID_KE_MODP_1024 ||
+      groupNum == IKE_TRANSFORM_ID_KE_MODP_1536 ||
+      groupNum == IKE_TRANSFORM_ID_KE_MODP_2048 ||
+      groupNum == IKE_TRANSFORM_ID_KE_MODP_3072 ||
+      groupNum == IKE_TRANSFORM_ID_KE_MODP_4096 ||
+      groupNum == IKE_TRANSFORM_ID_KE_MODP_6144 ||
+      groupNum == IKE_TRANSFORM_ID_KE_MODP_8192 ||
+      groupNum == IKE_TRANSFORM_ID_KE_MODP_1024_160 ||
+      groupNum == IKE_TRANSFORM_ID_KE_MODP_2048_224 ||
+      groupNum == IKE_TRANSFORM_ID_KE_MODP_2048_256)
    {
       return TRUE;
    }
@@ -2162,17 +2162,17 @@ bool_t ikeIsDhKeyExchangeAlgo(uint16_t groupNum)
 bool_t ikeIsEcdhKeyExchangeAlgo(uint16_t groupNum)
 {
    //ECDH key exchange?
-   if(groupNum == IKE_TRANSFORM_ID_DH_GROUP_ECP_192 ||
-      groupNum == IKE_TRANSFORM_ID_DH_GROUP_ECP_224 ||
-      groupNum == IKE_TRANSFORM_ID_DH_GROUP_ECP_256 ||
-      groupNum == IKE_TRANSFORM_ID_DH_GROUP_ECP_384 ||
-      groupNum == IKE_TRANSFORM_ID_DH_GROUP_ECP_521 ||
-      groupNum == IKE_TRANSFORM_ID_DH_GROUP_BRAINPOOLP224R1 ||
-      groupNum == IKE_TRANSFORM_ID_DH_GROUP_BRAINPOOLP256R1 ||
-      groupNum == IKE_TRANSFORM_ID_DH_GROUP_BRAINPOOLP384R1 ||
-      groupNum == IKE_TRANSFORM_ID_DH_GROUP_BRAINPOOLP512R1 ||
-      groupNum == IKE_TRANSFORM_ID_DH_GROUP_CURVE25519 ||
-      groupNum == IKE_TRANSFORM_ID_DH_GROUP_CURVE448)
+   if(groupNum == IKE_TRANSFORM_ID_KE_ECP_192 ||
+      groupNum == IKE_TRANSFORM_ID_KE_ECP_224 ||
+      groupNum == IKE_TRANSFORM_ID_KE_ECP_256 ||
+      groupNum == IKE_TRANSFORM_ID_KE_ECP_384 ||
+      groupNum == IKE_TRANSFORM_ID_KE_ECP_521 ||
+      groupNum == IKE_TRANSFORM_ID_KE_BRAINPOOLP224R1 ||
+      groupNum == IKE_TRANSFORM_ID_KE_BRAINPOOLP256R1 ||
+      groupNum == IKE_TRANSFORM_ID_KE_BRAINPOOLP384R1 ||
+      groupNum == IKE_TRANSFORM_ID_KE_BRAINPOOLP512R1 ||
+      groupNum == IKE_TRANSFORM_ID_KE_CURVE25519 ||
+      groupNum == IKE_TRANSFORM_ID_KE_CURVE448)
    {
       return TRUE;
    }
@@ -2192,9 +2192,9 @@ bool_t ikeIsEcdhKeyExchangeAlgo(uint16_t groupNum)
 bool_t ikeIsMlkemKeyExchangeAlgo(uint16_t groupNum)
 {
    //ML-KEM key exchange?
-   if(groupNum == IKE_TRANSFORM_ID_DH_GROUP_ML_KEM_512 ||
-      groupNum == IKE_TRANSFORM_ID_DH_GROUP_ML_KEM_768 ||
-      groupNum == IKE_TRANSFORM_ID_DH_GROUP_ML_KEM_1024)
+   if(groupNum == IKE_TRANSFORM_ID_KE_ML_KEM_512 ||
+      groupNum == IKE_TRANSFORM_ID_KE_ML_KEM_768 ||
+      groupNum == IKE_TRANSFORM_ID_KE_ML_KEM_1024)
    {
       return TRUE;
    }
@@ -2218,7 +2218,7 @@ const EcCurve *ikeGetEcdhCurve(uint16_t groupNum)
 #if (IKE_ECDH_KE_SUPPORT == ENABLED)
 #if (IKE_ECP_192_SUPPORT == ENABLED)
    //NIST P-192 elliptic curve?
-   if(groupNum == IKE_TRANSFORM_ID_DH_GROUP_ECP_192)
+   if(groupNum == IKE_TRANSFORM_ID_KE_ECP_192)
    {
       curve = SECP192R1_CURVE;
    }
@@ -2226,7 +2226,7 @@ const EcCurve *ikeGetEcdhCurve(uint16_t groupNum)
 #endif
 #if (IKE_ECP_224_SUPPORT == ENABLED)
    //NIST P-224 elliptic curve?
-   if(groupNum == IKE_TRANSFORM_ID_DH_GROUP_ECP_224)
+   if(groupNum == IKE_TRANSFORM_ID_KE_ECP_224)
    {
       curve = SECP224R1_CURVE;
    }
@@ -2234,7 +2234,7 @@ const EcCurve *ikeGetEcdhCurve(uint16_t groupNum)
 #endif
 #if (IKE_ECP_256_SUPPORT == ENABLED)
    //NIST P-256 elliptic curve?
-   if(groupNum == IKE_TRANSFORM_ID_DH_GROUP_ECP_256)
+   if(groupNum == IKE_TRANSFORM_ID_KE_ECP_256)
    {
       curve = SECP256R1_CURVE;
    }
@@ -2242,7 +2242,7 @@ const EcCurve *ikeGetEcdhCurve(uint16_t groupNum)
 #endif
 #if (IKE_ECP_384_SUPPORT == ENABLED)
    //NIST P-384 elliptic curve?
-   if(groupNum == IKE_TRANSFORM_ID_DH_GROUP_ECP_384)
+   if(groupNum == IKE_TRANSFORM_ID_KE_ECP_384)
    {
       curve = SECP384R1_CURVE;
    }
@@ -2250,7 +2250,7 @@ const EcCurve *ikeGetEcdhCurve(uint16_t groupNum)
 #endif
 #if (IKE_ECP_521_SUPPORT == ENABLED)
    //NIST P-521 elliptic curve?
-   if(groupNum == IKE_TRANSFORM_ID_DH_GROUP_ECP_521)
+   if(groupNum == IKE_TRANSFORM_ID_KE_ECP_521)
    {
       curve = SECP521R1_CURVE;
    }
@@ -2258,7 +2258,7 @@ const EcCurve *ikeGetEcdhCurve(uint16_t groupNum)
 #endif
 #if (IKE_BRAINPOOLP224R1_SUPPORT == ENABLED)
    //brainpoolP224r1 elliptic curve?
-   if(groupNum == IKE_TRANSFORM_ID_DH_GROUP_BRAINPOOLP224R1)
+   if(groupNum == IKE_TRANSFORM_ID_KE_BRAINPOOLP224R1)
    {
       curve = BRAINPOOLP224R1_CURVE;
    }
@@ -2266,7 +2266,7 @@ const EcCurve *ikeGetEcdhCurve(uint16_t groupNum)
 #endif
 #if (IKE_BRAINPOOLP256R1_SUPPORT == ENABLED)
    //brainpoolP256r1 elliptic curve?
-   if(groupNum == IKE_TRANSFORM_ID_DH_GROUP_BRAINPOOLP256R1)
+   if(groupNum == IKE_TRANSFORM_ID_KE_BRAINPOOLP256R1)
    {
       curve = BRAINPOOLP256R1_CURVE;
    }
@@ -2274,7 +2274,7 @@ const EcCurve *ikeGetEcdhCurve(uint16_t groupNum)
 #endif
 #if (IKE_BRAINPOOLP384R1_SUPPORT == ENABLED)
    //brainpoolP384r1 elliptic curve?
-   if(groupNum == IKE_TRANSFORM_ID_DH_GROUP_BRAINPOOLP384R1)
+   if(groupNum == IKE_TRANSFORM_ID_KE_BRAINPOOLP384R1)
    {
       curve = BRAINPOOLP384R1_CURVE;
    }
@@ -2282,7 +2282,7 @@ const EcCurve *ikeGetEcdhCurve(uint16_t groupNum)
 #endif
 #if (IKE_BRAINPOOLP512R1_SUPPORT == ENABLED)
    //brainpoolP512r1 elliptic curve?
-   if(groupNum == IKE_TRANSFORM_ID_DH_GROUP_BRAINPOOLP512R1)
+   if(groupNum == IKE_TRANSFORM_ID_KE_BRAINPOOLP512R1)
    {
       curve = BRAINPOOLP512R1_CURVE;
    }
@@ -2290,7 +2290,7 @@ const EcCurve *ikeGetEcdhCurve(uint16_t groupNum)
 #endif
 #if (IKE_CURVE25519_SUPPORT == ENABLED)
    //Curve25519 elliptic curve?
-   if(groupNum == IKE_TRANSFORM_ID_DH_GROUP_CURVE25519)
+   if(groupNum == IKE_TRANSFORM_ID_KE_CURVE25519)
    {
       curve = X25519_CURVE;
    }
@@ -2298,7 +2298,7 @@ const EcCurve *ikeGetEcdhCurve(uint16_t groupNum)
 #endif
 #if (IKE_CURVE448_SUPPORT == ENABLED)
    //Curve448 elliptic curve?
-   if(groupNum == IKE_TRANSFORM_ID_DH_GROUP_CURVE448)
+   if(groupNum == IKE_TRANSFORM_ID_KE_CURVE448)
    {
       curve = X448_CURVE;
    }
@@ -2316,23 +2316,23 @@ const EcCurve *ikeGetEcdhCurve(uint16_t groupNum)
 
 
 /**
- * @brief Get the default Diffie-Hellman group number
- * @return Default Diffie-Hellman group number
+ * @brief Get the default key exchange method
+ * @return Default group number
  **/
 
-uint16_t ikeSelectDefaultDhGroup(void)
+uint16_t ikeSelectDefaultGroup(void)
 {
    return ikeSupportedKeAlgos[0];
 }
 
 
 /**
- * @brief Check whether a given Diffie-Hellman group is supported
- * @param[in] groupNum Diffie-Hellman group number
- * @return TRUE is the Diffie-Hellman group is supported, else FALSE
+ * @brief Check whether a given key exchange method is supported
+ * @param[in] groupNum Group number
+ * @return TRUE is the key exchange method is supported, else FALSE
  **/
 
-bool_t ikeIsDhGroupSupported(uint16_t groupNum)
+bool_t ikeIsGroupSupported(uint16_t groupNum)
 {
    uint_t i;
    bool_t acceptable;
@@ -2340,10 +2340,10 @@ bool_t ikeIsDhGroupSupported(uint16_t groupNum)
    //Initialize flag
    acceptable = FALSE;
 
-   //Loop through the list of Diffie-Hellman groups supported by the entity
+   //Loop through the list of key exchange methods supported by the entity
    for(i = 0; i < arraysize(ikeSupportedKeAlgos); i++)
    {
-      //Compare Diffie-Hellman groups
+      //Compare group numbers
       if(ikeSupportedKeAlgos[i] == groupNum)
       {
          acceptable = TRUE;
@@ -2351,7 +2351,7 @@ bool_t ikeIsDhGroupSupported(uint16_t groupNum)
       }
    }
 
-   //Return TRUE is the Diffie-Hellman group is supported
+   //Return TRUE is the key exchange method is supported
    return acceptable;
 }
 

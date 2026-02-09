@@ -6,7 +6,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * Copyright (C) 2022-2025 Oryx Embedded SARL. All rights reserved.
+ * Copyright (C) 2022-2026 Oryx Embedded SARL. All rights reserved.
  *
  * This file is part of CycloneIPSEC Open.
  *
@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.5.4
+ * @version 2.6.0
  **/
 
 #ifndef _AH_H
@@ -211,11 +211,13 @@ error_t ipv4ProcessAhHeader(NetInterface *interface,
    const Ipv4Header *ipv4Header, const NetBuffer *buffer, size_t offset,
    NetRxAncillary *ancillary);
 
-error_t ahGenerateIcv(IpsecSadEntry *sa, const Ipv4Header *ipv4Header,
-   AhHeader *ahHeader, const NetBuffer *buffer, size_t offset);
+error_t ahGenerateIcv(IpsecContext *context, IpsecSadEntry *sa,
+   const Ipv4Header *ipv4Header, AhHeader *ahHeader, const NetBuffer *buffer,
+   size_t offset);
 
-error_t ahVerifyIcv(IpsecSadEntry *sa, const Ipv4Header *ipv4Header,
-   const AhHeader *ahHeader, const NetBuffer *buffer, size_t offset);
+error_t ahVerifyIcv(IpsecContext *context, IpsecSadEntry *sa,
+   const Ipv4Header *ipv4Header, const AhHeader *ahHeader,
+   const NetBuffer *buffer, size_t offset);
 
 void ahProcessMutableIpv4Options(Ipv4Header *header);
 

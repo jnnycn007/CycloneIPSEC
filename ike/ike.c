@@ -6,7 +6,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * Copyright (C) 2022-2025 Oryx Embedded SARL. All rights reserved.
+ * Copyright (C) 2022-2026 Oryx Embedded SARL. All rights reserved.
  *
  * This file is part of CycloneIPSEC Open.
  *
@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.5.4
+ * @version 2.6.0
  **/
 
 //Switch to the appropriate trace level
@@ -60,6 +60,8 @@ void ikeGetDefaultSettings(IkeSettings *settings)
    settings->task.stackSize = IKE_STACK_SIZE;
    settings->task.priority = IKE_PRIORITY;
 
+   //TCP/IP stack context
+   settings->netContext = NULL;
    //Underlying network interface
    settings->interface = NULL;
 
@@ -133,6 +135,20 @@ error_t ikeInit(IkeContext *context, const IkeSettings *settings)
    context->taskParams = settings->task;
    context->taskId = OS_INVALID_TASK_ID;
 
+   //Attach TCP/IP stack context
+   if(settings->netContext != NULL)
+   {
+      context->netContext = settings->netContext;
+   }
+   else if(settings->interface != NULL)
+   {
+      context->netContext = settings->interface->netContext;
+   }
+   else
+   {
+      context->netContext = netGetDefaultContext();
+   }
+
    //Underlying network interface
    context->interface = settings->interface;
 
@@ -170,11 +186,15 @@ error_t ikeInit(IkeContext *context, const IkeSettings *settings)
    context->certVerifyCallback = settings->certVerifyCallback;
 #endif
 
-   //Save the preferred Diffie-Hellman group number
-   context->preferredDhGroupNum = ikeSelectDefaultDhGroup();
+   //Save the preferred key exchange method
+   context->preferredGroupNum = ikeSelectDefaultGroup();
 
+   //Get exclusive access
+   netLock(context->netContext);
    //Attach IKE context
-   netContext.ikeContext = context;
+   context->netContext->ikeContext = context;
+   //Release exclusive access
+   netUnlock(context->netContext);
 
    //Initialize status code
    error = NO_ERROR;
@@ -223,7 +243,8 @@ error_t ikeStart(IkeContext *context)
    do
    {
       //Open a UDP socket
-      context->socket = socketOpen(SOCKET_TYPE_DGRAM, SOCKET_IP_PROTO_UDP);
+      context->socket = socketOpenEx(context->netContext, SOCKET_TYPE_DGRAM,
+         SOCKET_IP_PROTO_UDP);
       //Failed to open socket?
       if(context->socket == NULL)
       {
@@ -233,8 +254,7 @@ error_t ikeStart(IkeContext *context)
       }
 
       //Associate the socket with the relevant interface
-      error = socketBindToInterface(context->socket,
-         context->interface);
+      error = socketBindToInterface(context->socket, context->interface);
       //Unable to bind the socket to the desired interface?
       if(error)
          break;
@@ -323,24 +343,24 @@ error_t ikeStop(IkeContext *context)
 
 
 /**
- * @brief Specify the preferred Diffie-Hellman group
+ * @brief Specify the preferred key exchange method
  * @param[in] context Pointer to the IKE context
- * @param[in] dhGroupNum Preferred Diffie-Hellman group number
+ * @param[in] groupNum Preferred group number
  * @return Error code
  **/
 
-error_t ikeSetPreferredDhGroup(IkeContext *context, uint16_t dhGroupNum)
+error_t ikeSetPreferredGroup(IkeContext *context, uint16_t groupNum)
 {
    //Make sure the IKE context is valid
    if(context == NULL)
       return ERROR_INVALID_PARAMETER;
 
-   //Ensure the specified group number is supported
-   if(!ikeIsDhGroupSupported(dhGroupNum))
+   //Ensure the specified key exchange method is supported
+   if(!ikeIsGroupSupported(groupNum))
       return ERROR_INVALID_GROUP;
 
-   //Save the preferred Diffie-Hellman group number
-   context->preferredDhGroupNum = dhGroupNum;
+   //Save the preferred key exchange method
+   context->preferredGroupNum = groupNum;
 
    //Successful processing
    return NO_ERROR;
@@ -597,7 +617,10 @@ error_t ikeCreateChildSa(IkeContext *context, const IpsecPacketInfo *packet)
    TRACE_INFO("Creating Child SA...\r\n");
 
    //Point to the IPsec context
-   ipsecContext = netContext.ipsecContext;
+   ipsecContext = context->netContext->ipsecContext;
+   //Sanity check
+   if(ipsecContext == NULL)
+      return ERROR_FAILURE;
 
    //The selectors are used to define the granularity of the SAs that are
    //created in response to the triggering packet
@@ -741,7 +764,7 @@ void ikeTask(IkeContext *context)
       //Stop request?
       if(context->stop)
       {
-         //Stop SNMP agent operation
+         //Stop IKE service
          context->running = FALSE;
          //Task epilogue
          osExitTask();
@@ -782,11 +805,20 @@ void ikeTask(IkeContext *context)
 
 void ikeDeinit(IkeContext *context)
 {
+   NetContext *netContext;
+
    //Make sure the IKE context is valid
    if(context != NULL)
    {
-      //Detach IKE context
-      netContext.ikeContext = NULL;
+      //Point to the TCP/IP stack context
+      netContext = context->netContext;
+
+      //Get exclusive access
+      netLock(netContext);
+      //Detach the IKE context
+      netContext->ikeContext = NULL;
+      //Release exclusive access
+      netUnlock(netContext);
 
       //Free previously allocated resources
       osDeleteEvent(&context->event);

@@ -6,7 +6,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * Copyright (C) 2022-2025 Oryx Embedded SARL. All rights reserved.
+ * Copyright (C) 2022-2026 Oryx Embedded SARL. All rights reserved.
  *
  * This file is part of CycloneIPSEC Open.
  *
@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.5.4
+ * @version 2.6.0
  **/
 
 //Switch to the appropriate trace level
@@ -398,7 +398,7 @@ const IkeDhGroup *ikeGetDhGroup(uint16_t groupNum)
 
 #if (IKE_MAX_DH_MODULUS_SIZE >= 768 && IKE_MIN_DH_MODULUS_SIZE <= 768)
    //Diffie-Hellman group 1?
-   if(groupNum == IKE_TRANSFORM_ID_DH_GROUP_MODP_768)
+   if(groupNum == IKE_TRANSFORM_ID_KE_MODP_768)
    {
       group = &ikeDhGroup1;
    }
@@ -406,7 +406,7 @@ const IkeDhGroup *ikeGetDhGroup(uint16_t groupNum)
 #endif
 #if (IKE_MAX_DH_MODULUS_SIZE >= 1024 && IKE_MIN_DH_MODULUS_SIZE <= 1024)
    //Diffie-Hellman group 2?
-   if(groupNum == IKE_TRANSFORM_ID_DH_GROUP_MODP_1024)
+   if(groupNum == IKE_TRANSFORM_ID_KE_MODP_1024)
    {
       group = &ikeDhGroup2;
    }
@@ -414,7 +414,7 @@ const IkeDhGroup *ikeGetDhGroup(uint16_t groupNum)
 #endif
 #if (IKE_MAX_DH_MODULUS_SIZE >= 1536 && IKE_MIN_DH_MODULUS_SIZE <= 1536)
    //Diffie-Hellman group 5?
-   if(groupNum == IKE_TRANSFORM_ID_DH_GROUP_MODP_1536)
+   if(groupNum == IKE_TRANSFORM_ID_KE_MODP_1536)
    {
       group = &ikeDhGroup5;
    }
@@ -422,7 +422,7 @@ const IkeDhGroup *ikeGetDhGroup(uint16_t groupNum)
 #endif
 #if (IKE_MAX_DH_MODULUS_SIZE >= 2048 && IKE_MIN_DH_MODULUS_SIZE <= 2048)
    //Diffie-Hellman group 14?
-   if(groupNum == IKE_TRANSFORM_ID_DH_GROUP_MODP_2048)
+   if(groupNum == IKE_TRANSFORM_ID_KE_MODP_2048)
    {
       group = &ikeDhGroup14;
    }
@@ -430,7 +430,7 @@ const IkeDhGroup *ikeGetDhGroup(uint16_t groupNum)
 #endif
 #if (IKE_MAX_DH_MODULUS_SIZE >= 3072 && IKE_MIN_DH_MODULUS_SIZE <= 3072)
    //Diffie-Hellman group 15?
-   if(groupNum == IKE_TRANSFORM_ID_DH_GROUP_MODP_3072)
+   if(groupNum == IKE_TRANSFORM_ID_KE_MODP_3072)
    {
       group = &ikeDhGroup15;
    }
@@ -438,7 +438,7 @@ const IkeDhGroup *ikeGetDhGroup(uint16_t groupNum)
 #endif
 #if (IKE_MAX_DH_MODULUS_SIZE >= 4096 && IKE_MIN_DH_MODULUS_SIZE <= 4096)
    //Diffie-Hellman group 16?
-   if(groupNum == IKE_TRANSFORM_ID_DH_GROUP_MODP_4096)
+   if(groupNum == IKE_TRANSFORM_ID_KE_MODP_4096)
    {
       group = &ikeDhGroup16;
    }
@@ -446,7 +446,7 @@ const IkeDhGroup *ikeGetDhGroup(uint16_t groupNum)
 #endif
 #if (IKE_MAX_DH_MODULUS_SIZE >= 6144 && IKE_MIN_DH_MODULUS_SIZE <= 6144)
    //Diffie-Hellman group 17?
-   if(groupNum == IKE_TRANSFORM_ID_DH_GROUP_MODP_6144)
+   if(groupNum == IKE_TRANSFORM_ID_KE_MODP_6144)
    {
       group = &ikeDhGroup17;
    }
@@ -454,7 +454,7 @@ const IkeDhGroup *ikeGetDhGroup(uint16_t groupNum)
 #endif
 #if (IKE_MAX_DH_MODULUS_SIZE >= 8192 && IKE_MIN_DH_MODULUS_SIZE <= 8192)
    //Diffie-Hellman group 18?
-   if(groupNum == IKE_TRANSFORM_ID_DH_GROUP_MODP_8192)
+   if(groupNum == IKE_TRANSFORM_ID_KE_MODP_8192)
    {
       group = &ikeDhGroup18;
    }

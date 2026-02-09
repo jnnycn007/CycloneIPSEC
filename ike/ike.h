@@ -6,7 +6,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * Copyright (C) 2022-2025 Oryx Embedded SARL. All rights reserved.
+ * Copyright (C) 2022-2026 Oryx Embedded SARL. All rights reserved.
  *
  * This file is part of CycloneIPSEC Open.
  *
@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.5.4
+ * @version 2.6.0
  **/
 
 #ifndef _IKE_H
@@ -909,7 +909,7 @@ typedef enum
    IKE_TRANSFORM_TYPE_ENCR   = 1,  ///<Encryption Algorithm
    IKE_TRANSFORM_TYPE_PRF    = 2,  ///<Pseudorandom Function
    IKE_TRANSFORM_TYPE_INTEG  = 3,  ///<Integrity Algorithm
-   IKE_TRANSFORM_TYPE_DH     = 4,  ///<Diffie-Hellman Group
+   IKE_TRANSFORM_TYPE_KE     = 4,  ///<Key Exchange Method
    IKE_TRANSFORM_TYPE_ESN    = 5,  ///<Extended Sequence Numbers
    IKE_TRANSFORM_TYPE_ADDKE1 = 6,  ///<Additional Key Exchange 1
    IKE_TRANSFORM_TYPE_ADDKE2 = 7,  ///<Additional Key Exchange 2
@@ -1009,39 +1009,39 @@ typedef enum
 
 
 /**
- * @brief Transform IDs (Diffie-Hellman Group)
+ * @brief Transform IDs (Key Exchange Methods)
  **/
 
 typedef enum
 {
-   IKE_TRANSFORM_ID_DH_GROUP_NONE              = 0,  ///<None
-   IKE_TRANSFORM_ID_DH_GROUP_MODP_768          = 1,  ///<768-bit MODP Group
-   IKE_TRANSFORM_ID_DH_GROUP_MODP_1024         = 2,  ///<1024-bit MODP Group
-   IKE_TRANSFORM_ID_DH_GROUP_MODP_1536         = 5,  ///<1536-bit MODP Group
-   IKE_TRANSFORM_ID_DH_GROUP_MODP_2048         = 14, ///<2048-bit MODP Group
-   IKE_TRANSFORM_ID_DH_GROUP_MODP_3072         = 15, ///<3072-bit MODP Group
-   IKE_TRANSFORM_ID_DH_GROUP_MODP_4096         = 16, ///<4096-bit MODP Group
-   IKE_TRANSFORM_ID_DH_GROUP_MODP_6144         = 17, ///<6144-bit MODP Group
-   IKE_TRANSFORM_ID_DH_GROUP_MODP_8192         = 18, ///<8192-bit MODP Group
-   IKE_TRANSFORM_ID_DH_GROUP_ECP_256           = 19, ///<256-bit Random ECP Group
-   IKE_TRANSFORM_ID_DH_GROUP_ECP_384           = 20, ///<384-bit Random ECP Group
-   IKE_TRANSFORM_ID_DH_GROUP_ECP_521           = 21, ///<521-bit Random ECP Group
-   IKE_TRANSFORM_ID_DH_GROUP_MODP_1024_160     = 22, ///<1024-bit MODP Group with 160-bit Prime Order Subgroup
-   IKE_TRANSFORM_ID_DH_GROUP_MODP_2048_224     = 23, ///<2048-bit MODP Group with 224-bit Prime Order Subgroup
-   IKE_TRANSFORM_ID_DH_GROUP_MODP_2048_256     = 24, ///<2048-bit MODP Group with 256-bit Prime Order Subgroup
-   IKE_TRANSFORM_ID_DH_GROUP_ECP_192           = 25, ///<192-bit Random ECP Group
-   IKE_TRANSFORM_ID_DH_GROUP_ECP_224           = 26, ///<224-bit Random ECP Group
-   IKE_TRANSFORM_ID_DH_GROUP_BRAINPOOLP224R1   = 27, ///<224-bit Brainpool ECP Group
-   IKE_TRANSFORM_ID_DH_GROUP_BRAINPOOLP256R1   = 28, ///<256-bit Brainpool ECP Group
-   IKE_TRANSFORM_ID_DH_GROUP_BRAINPOOLP384R1   = 29, ///<384-bit Brainpool ECP Group
-   IKE_TRANSFORM_ID_DH_GROUP_BRAINPOOLP512R1   = 30, ///<512-bit Brainpool ECP Group
-   IKE_TRANSFORM_ID_DH_GROUP_CURVE25519        = 31, ///<curve25519
-   IKE_TRANSFORM_ID_DH_GROUP_CURVE448          = 32, ///<curve448
-   IKE_TRANSFORM_ID_DH_GROUP_GOST3410_2012_256 = 33, ///<GOST3410_2012_256
-   IKE_TRANSFORM_ID_DH_GROUP_GOST3410_2012_512 = 34, ///<GOST3410_2012_512
-   IKE_TRANSFORM_ID_DH_GROUP_ML_KEM_512        = 35, ///<ML-KEM-512
-   IKE_TRANSFORM_ID_DH_GROUP_ML_KEM_768        = 36, ///<ML-KEM-768
-   IKE_TRANSFORM_ID_DH_GROUP_ML_KEM_1024       = 37, ///<ML-KEM-1024
+   IKE_TRANSFORM_ID_KE_NONE              = 0,  ///<None
+   IKE_TRANSFORM_ID_KE_MODP_768          = 1,  ///<768-bit MODP Group
+   IKE_TRANSFORM_ID_KE_MODP_1024         = 2,  ///<1024-bit MODP Group
+   IKE_TRANSFORM_ID_KE_MODP_1536         = 5,  ///<1536-bit MODP Group
+   IKE_TRANSFORM_ID_KE_MODP_2048         = 14, ///<2048-bit MODP Group
+   IKE_TRANSFORM_ID_KE_MODP_3072         = 15, ///<3072-bit MODP Group
+   IKE_TRANSFORM_ID_KE_MODP_4096         = 16, ///<4096-bit MODP Group
+   IKE_TRANSFORM_ID_KE_MODP_6144         = 17, ///<6144-bit MODP Group
+   IKE_TRANSFORM_ID_KE_MODP_8192         = 18, ///<8192-bit MODP Group
+   IKE_TRANSFORM_ID_KE_ECP_256           = 19, ///<256-bit Random ECP Group
+   IKE_TRANSFORM_ID_KE_ECP_384           = 20, ///<384-bit Random ECP Group
+   IKE_TRANSFORM_ID_KE_ECP_521           = 21, ///<521-bit Random ECP Group
+   IKE_TRANSFORM_ID_KE_MODP_1024_160     = 22, ///<1024-bit MODP Group with 160-bit Prime Order Subgroup
+   IKE_TRANSFORM_ID_KE_MODP_2048_224     = 23, ///<2048-bit MODP Group with 224-bit Prime Order Subgroup
+   IKE_TRANSFORM_ID_KE_MODP_2048_256     = 24, ///<2048-bit MODP Group with 256-bit Prime Order Subgroup
+   IKE_TRANSFORM_ID_KE_ECP_192           = 25, ///<192-bit Random ECP Group
+   IKE_TRANSFORM_ID_KE_ECP_224           = 26, ///<224-bit Random ECP Group
+   IKE_TRANSFORM_ID_KE_BRAINPOOLP224R1   = 27, ///<224-bit Brainpool ECP Group
+   IKE_TRANSFORM_ID_KE_BRAINPOOLP256R1   = 28, ///<256-bit Brainpool ECP Group
+   IKE_TRANSFORM_ID_KE_BRAINPOOLP384R1   = 29, ///<384-bit Brainpool ECP Group
+   IKE_TRANSFORM_ID_KE_BRAINPOOLP512R1   = 30, ///<512-bit Brainpool ECP Group
+   IKE_TRANSFORM_ID_KE_CURVE25519        = 31, ///<curve25519
+   IKE_TRANSFORM_ID_KE_CURVE448          = 32, ///<curve448
+   IKE_TRANSFORM_ID_KE_GOST3410_2012_256 = 33, ///<GOST3410_2012_256
+   IKE_TRANSFORM_ID_KE_GOST3410_2012_512 = 34, ///<GOST3410_2012_512
+   IKE_TRANSFORM_ID_KE_ML_KEM_512        = 35, ///<ML-KEM-512
+   IKE_TRANSFORM_ID_KE_ML_KEM_768        = 36, ///<ML-KEM-768
+   IKE_TRANSFORM_ID_KE_ML_KEM_1024       = 37, ///<ML-KEM-1024
 } IkeTransformIdDhGroup;
 
 
@@ -1503,10 +1503,10 @@ typedef __packed_struct
 
 typedef __packed_struct
 {
-   IkePayloadHeader header;   //0-3
-   uint16_t dhGroupNum;       //4-5
-   uint16_t reserved;         //6-7
-   uint8_t keyExchangeData[]; //8
+   IkePayloadHeader header;    //0-3
+   uint16_t keyExchangeMethod; //4-5
+   uint16_t reserved;          //6-7
+   uint8_t keyExchangeData[];  //8
 } IkeKePayload;
 
 
@@ -1820,7 +1820,7 @@ struct _IkeSaEntry
    uint16_t encAlgoId;                  ///<Encryption algorithm
    uint16_t prfAlgoId;                  ///<Pseudorandom function
    uint16_t authAlgoId;                 ///<Integrity algorithm
-   uint16_t dhGroupNum;                 ///<Diffie-Hellman group number
+   uint16_t groupNum;                   ///<Key exchange method
    uint8_t acceptedProposalNum;         ///<Number of the accepted proposal
 
    uint8_t sharedSecret[IKE_MAX_SHARED_SECRET_LEN]; ///<Shared secret
@@ -1946,6 +1946,7 @@ struct _IkeChildSaEntry
 typedef struct
 {
    OsTaskParameters task;                            ///<Task parameters
+   NetContext *netContext;                           ///<TCP/IP stack context
    NetInterface *interface;                          ///<Underlying network interface
    const PrngAlgo *prngAlgo;                         ///<Pseudo-random number generator to be used
    void *prngContext;                                ///<Pseudo-random number generator context
@@ -1980,6 +1981,7 @@ struct _IkeContext
    OsEvent event;                             ///<Event object used to poll the underlying socket
    OsTaskParameters taskParams;               ///<Task parameters
    OsTaskId taskId;                           ///<Task identifier
+   NetContext *netContext;                    ///<TCP/IP stack context
    NetInterface *interface;                   ///<Underlying network interface
    const PrngAlgo *prngAlgo;                  ///<Pseudo-random number generator to be used
    void *prngContext;                         ///<Pseudo-random number generator context
@@ -1989,7 +1991,7 @@ struct _IkeContext
 #if (IKE_DPD_SUPPORT == ENABLED)
    systime_t dpdPeriod;                       ///<Dead peer detection period
 #endif
-   uint16_t preferredDhGroupNum;              ///<Preferred Diffie-Hellman group number
+   uint16_t preferredGroupNum;                ///<Preferred key exchange method
    IkeIdType idType;                          ///<ID type
    uint8_t id[IKE_MAX_ID_LEN];                ///<ID
    size_t idLen;                              ///<Length of the ID, in bytes
@@ -2040,7 +2042,7 @@ error_t ikeInit(IkeContext *context, const IkeSettings *settings);
 error_t ikeStart(IkeContext *context);
 error_t ikeStop(IkeContext *context);
 
-error_t ikeSetPreferredDhGroup(IkeContext *context, uint16_t dhGroupNum);
+error_t ikeSetPreferredGroup(IkeContext *context, uint16_t groupNum);
 
 error_t ikeSetId(IkeContext *context, IkeIdType idType, const void *id,
    size_t idLen);

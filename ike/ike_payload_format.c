@@ -6,7 +6,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * Copyright (C) 2022-2025 Oryx Embedded SARL. All rights reserved.
+ * Copyright (C) 2022-2026 Oryx Embedded SARL. All rights reserved.
  *
  * This file is part of CycloneIPSEC Open.
  *
@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.5.4
+ * @version 2.6.0
  **/
 
 //Switch to the appropriate trace level
@@ -237,7 +237,7 @@ error_t ikeFormatSaProposal(IkeSaEntry *sa, const uint8_t *spi, uint8_t *p,
 
       //The accepted cryptographic suite must contain exactly one key
       //exchange transform
-      error = ikeAddTransform(IKE_TRANSFORM_TYPE_DH, sa->dhGroupNum, 0,
+      error = ikeAddTransform(IKE_TRANSFORM_TYPE_KE, sa->groupNum, 0,
          proposal, &lastSubstruc);
       //Any error to report?
       if(error)
@@ -450,9 +450,9 @@ error_t ikeFormatKePayload(IkeSaEntry *sa, uint8_t *p, size_t *written,
    kePayload->header.critical = FALSE;
    kePayload->header.reserved = 0;
 
-   //The Diffie-Hellman Group Num identifies the Diffie-Hellman group in
-   //which the Key Exchange Data was computed
-   kePayload->dhGroupNum = htons(sa->dhGroupNum);
+   //The Key Exchange Method identifies the Diffie-Hellman group in which the
+   //Key Exchange Data was computed
+   kePayload->keyExchangeMethod = htons(sa->groupNum);
 
    //For forward compatibility, all fields marked RESERVED must be set to
    //zero (refer to RFC 7296, section 2.5)
@@ -759,8 +759,8 @@ error_t ikeFormatCertReqPayload(IkeSaEntry *sa, uint8_t *p, size_t *written,
    error = NO_ERROR;
 
    //Point to the IPsec context
-   ipsecContext = netContext.ipsecContext;
-   //Any error to report?
+   ipsecContext = sa->context->netContext->ipsecContext;
+   //Sanity check
    if(ipsecContext == NULL)
       return ERROR_FAILURE;
 
@@ -1030,7 +1030,7 @@ error_t ikeFormatNotifyPayload(IkeSaEntry *sa, IkeChildSaEntry *childSa,
    {
       //The responder indicate its preferred Diffie-Hellman group in the
       //INVALID_KE_PAYLOAD Notify payload
-      STORE16BE(sa->dhGroupNum, notifyPayload->spi);
+      STORE16BE(sa->groupNum, notifyPayload->spi);
 
       //Total length of the payload
       *written += sizeof(uint16_t);

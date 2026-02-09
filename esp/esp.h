@@ -6,7 +6,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * Copyright (C) 2022-2025 Oryx Embedded SARL. All rights reserved.
+ * Copyright (C) 2022-2026 Oryx Embedded SARL. All rights reserved.
  *
  * This file is part of CycloneIPSEC Open.
  *
@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.5.4
+ * @version 2.6.0
  **/
 
 #ifndef _ESP_H
@@ -116,6 +116,13 @@
    #define ESP_CMAC_SUPPORT DISABLED
 #elif (ESP_CMAC_SUPPORT != ENABLED && ESP_CMAC_SUPPORT != DISABLED)
    #error ESP_CMAC_SUPPORT parameter is not valid
+#endif
+
+//GMAC integrity support
+#ifndef ESP_GMAC_SUPPORT
+   #define ESP_GMAC_SUPPORT DISABLED
+#elif (ESP_GMAC_SUPPORT != ENABLED && ESP_GMAC_SUPPORT != DISABLED)
+   #error ESP_GMAC_SUPPORT parameter is not valid
 #endif
 
 //HMAC integrity support
@@ -288,17 +295,6 @@
    #define ESP_MAX_DIGEST_SIZE 32
 #else
    #define ESP_MAX_DIGEST_SIZE 12
-#endif
-
-//Maximum size of the ICV field
-#if (ESP_HMAC_SUPPORT == ENABLED && ESP_SHA512_SUPPORT == ENABLED)
-   #define ESP_MAX_ICV_SIZE 32
-#elif (ESP_HMAC_SUPPORT == ENABLED && ESP_SHA384_SUPPORT == ENABLED)
-   #define ESP_MAX_ICV_SIZE 24
-#elif (ESP_HMAC_SUPPORT == ENABLED && ESP_SHA256_SUPPORT == ENABLED)
-   #define ESP_MAX_ICV_SIZE 16
-#else
-   #define ESP_MAX_ICV_SIZE 12
 #endif
 
 //C++ guard

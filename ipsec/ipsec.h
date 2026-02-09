@@ -6,7 +6,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * Copyright (C) 2022-2025 Oryx Embedded SARL. All rights reserved.
+ * Copyright (C) 2022-2026 Oryx Embedded SARL. All rights reserved.
  *
  * This file is part of CycloneIPSEC Open.
  *
@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.5.4
+ * @version 2.6.0
  **/
 
 #ifndef _IPSEC_H
@@ -34,6 +34,10 @@
 //Forward declaration of IpsecSadEntry structure
 struct _IpsecSadEntry;
 #define IpsecSadEntry struct _IpsecSadEntry
+
+//Forward declaration of IpsecContext structure
+struct _IpsecContext;
+#define IpsecContext struct _IpsecContext
 
 //Dependencies
 #include "ipsec_config.h"
@@ -77,13 +81,13 @@ struct _IpsecSadEntry;
 #endif
 
 //Version string
-#define CYCLONE_IPSEC_VERSION_STRING "2.5.4"
+#define CYCLONE_IPSEC_VERSION_STRING "2.6.0"
 //Major version
 #define CYCLONE_IPSEC_MAJOR_VERSION 2
 //Minor version
-#define CYCLONE_IPSEC_MINOR_VERSION 5
+#define CYCLONE_IPSEC_MINOR_VERSION 6
 //Revision number
-#define CYCLONE_IPSEC_REV_NUMBER 4
+#define CYCLONE_IPSEC_REV_NUMBER 0
 
 //IPsec support
 #ifndef IPSEC_SUPPORT
@@ -415,6 +419,7 @@ typedef struct
 
 typedef struct
 {
+   NetContext *netContext;    ///<TCP/IP stack context
    const PrngAlgo *prngAlgo;  ///<Pseudo-random number generator to be used
    void *prngContext;         ///<Pseudo-random number generator context
    IpsecSpdEntry *spdEntries; ///<Security Policy Database (SPD)
@@ -430,8 +435,9 @@ typedef struct
  * @brief IPsec context
  **/
 
-typedef struct
+struct _IpsecContext
 {
+   NetContext *netContext;          ///<TCP/IP stack context
    const PrngAlgo *prngAlgo;        ///<Pseudo-random number generator to be used
    void *prngContext;               ///<Pseudo-random number generator context
    IpsecSpdEntry *spd;              ///<Security Policy Database (SPD)
@@ -443,13 +449,16 @@ typedef struct
 #if (AH_CMAC_SUPPORT == ENABLED || ESP_CMAC_SUPPORT == ENABLED)
    CmacContext cmacContext;         ///<CMAC context
 #endif
+#if (ESP_GMAC_SUPPORT == ENABLED)
+   GmacContext gmacContext;         ///<GMAC context
+#endif
 #if (AH_HMAC_SUPPORT == ENABLED || ESP_HMAC_SUPPORT == ENABLED)
    HmacContext hmacContext;         ///<HMAC context
 #endif
 #if (ESP_SUPPORT == ENABLED)
    uint8_t buffer[ESP_BUFFER_SIZE]; ///<Memory buffer for input/output operations
 #endif
-} IpsecContext;
+};
 
 
 //IPsec related functions
@@ -471,6 +480,8 @@ error_t ipsecSetPadEntry(IpsecContext *context, uint_t index,
    IpsecPadEntry *params);
 
 error_t ipsecClearPadEntry(IpsecContext *context, uint_t index);
+
+void ipsecDeinit(IpsecContext *context);
 
 //C++ guard
 #ifdef __cplusplus

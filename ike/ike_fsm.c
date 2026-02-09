@@ -6,7 +6,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * Copyright (C) 2022-2025 Oryx Embedded SARL. All rights reserved.
+ * Copyright (C) 2022-2026 Oryx Embedded SARL. All rights reserved.
  *
  * This file is part of CycloneIPSEC Open.
  *
@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.5.4
+ * @version 2.6.0
  **/
 
 //Switch to the appropriate trace level
@@ -502,8 +502,8 @@ error_t ikeProcessSaRekeyEvent(IkeSaEntry *sa)
       //of the new IKE SA (refer to RFC 7296, section 1.3.2)
       newSa->originalInitiator = TRUE;
 
-      //Select the preferred Diffie-Hellman group number
-      newSa->dhGroupNum = context->preferredDhGroupNum;
+      //Select the preferred key exchange method
+      newSa->groupNum = context->preferredGroupNum;
 
       //Each endpoint chooses one of the two SPIs and must choose them so as to
       //be unique identifiers of an IKE SA (refer to RFC 7296, section 2.6)
@@ -604,8 +604,8 @@ error_t ikeProcessSaReauthEvent(IkeSaEntry *sa)
             //of the new IKE SA (refer to RFC 7296, section 1.3.2)
             newSa->originalInitiator = TRUE;
 
-            //Select the preferred Diffie-Hellman group number
-            newSa->dhGroupNum = context->preferredDhGroupNum;
+            //Select the preferred key exchange method
+            newSa->groupNum = context->preferredGroupNum;
 
             //Initialize Child SA
             newChildSa->sa = newSa;
@@ -738,8 +738,8 @@ error_t ikeProcessChildSaInitEvent(IkeChildSaEntry *childSa)
          //exchange (refer to RFC 7296, section 2.2)
          sa->originalInitiator = TRUE;
 
-         //Select the preferred Diffie-Hellman group number
-         sa->dhGroupNum = context->preferredDhGroupNum;
+         //Select the preferred key exchange method
+         sa->groupNum = context->preferredGroupNum;
 
          //Attach the newly created IKE SA to the Child SA
          childSa->sa = sa;

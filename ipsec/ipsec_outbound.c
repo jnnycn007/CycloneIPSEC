@@ -6,7 +6,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * Copyright (C) 2022-2025 Oryx Embedded SARL. All rights reserved.
+ * Copyright (C) 2022-2026 Oryx Embedded SARL. All rights reserved.
  *
  * This file is part of CycloneIPSEC Open.
  *
@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.5.4
+ * @version 2.6.0
  **/
 
 //Dependencies
@@ -64,7 +64,7 @@ error_t ipsecProcessOutboundIpv4Packet(NetInterface *interface,
    IpsecSelector selector;
 
    //Point to the IPsec context
-   context = netContext.ipsecContext;
+   context = interface->netContext->ipsecContext;
 
    //Extract packet's selector from the packet headers
    error = ipsecGetOutboundIpv4PacketSelector(pseudoHeader, buffer, offset,
@@ -108,7 +108,7 @@ error_t ipsecProcessOutboundIpv4Packet(NetInterface *interface,
                packetInfo.remotePort = selector.remotePort.start;
 
                //Create a new SA
-               ikeCreateChildSa(netContext.ikeContext, &packetInfo);
+               ikeCreateChildSa(interface->netContext->ikeContext, &packetInfo);
 
                //There is no requirement that an implementation buffer the packet
                //if there is a cache miss (refer to RFC 4301, section 5.2)
@@ -322,7 +322,7 @@ error_t ipsecProtectIpv4Packet(IpsecContext *context, IpsecSadEntry *sa,
          ipv4Header.destAddr = pseudoHeader->destAddr;
 
          //Compute ICV value
-         error = ahGenerateIcv(sa, &ipv4Header, ahHeader, buffer,
+         error = ahGenerateIcv(context, sa, &ipv4Header, ahHeader, buffer,
             offset + sizeof(AhHeader) + sa->icvLen);
          //Any error to report?
          if(error)

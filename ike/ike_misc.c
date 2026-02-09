@@ -6,7 +6,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * Copyright (C) 2022-2025 Oryx Embedded SARL. All rights reserved.
+ * Copyright (C) 2022-2026 Oryx Embedded SARL. All rights reserved.
  *
  * This file is part of CycloneIPSEC Open.
  *
@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.5.4
+ * @version 2.6.0
  **/
 
 //Switch to the appropriate trace level
@@ -397,6 +397,10 @@ IkeChildSaEntry *ikeCreateChildSaEntry(IkeContext *context)
 {
    uint_t i;
    IkeChildSaEntry *childSa;
+   IpsecContext *ipsecContext;
+
+   //Point to the IPsec context
+   ipsecContext = context->netContext->ipsecContext;
 
    //Loop through Child SA entries
    for(i = 0; i < context->numChildSaEntries; i++)
@@ -414,7 +418,7 @@ IkeChildSaEntry *ikeCreateChildSaEntry(IkeContext *context)
          childSa->context = context;
 
          //Allocate inbound SAD entry
-         childSa->inboundSa = ipsecAllocateSadEntry(netContext.ipsecContext);
+         childSa->inboundSa = ipsecAllocateSadEntry(ipsecContext);
 
          //Failed to allocated SAD entry?
          if(childSa->inboundSa < 0)
@@ -424,13 +428,13 @@ IkeChildSaEntry *ikeCreateChildSaEntry(IkeContext *context)
          }
 
          //Allocate outbound SAD entry
-         childSa->outboundSa = ipsecAllocateSadEntry(netContext.ipsecContext);
+         childSa->outboundSa = ipsecAllocateSadEntry(ipsecContext);
 
          //Failed to allocated SAD entry?
          if(childSa->outboundSa < 0)
          {
             //Clean up side effects
-            ipsecClearSadEntry(netContext.ipsecContext, childSa->inboundSa);
+            ipsecClearSadEntry(ipsecContext, childSa->inboundSa);
             //The SAD database runs out of space
             return NULL;
          }
@@ -500,19 +504,24 @@ IkeChildSaEntry *ikeFindChildSaEntry(IkeSaEntry *sa, uint8_t protocolId,
 
 void ikeDeleteChildSaEntry(IkeChildSaEntry *childSa)
 {
+   IpsecContext *ipsecContext;
+
    //Debug message
    TRACE_INFO("Deleting Child SA...\r\n");
+
+   //Point to the IPsec context
+   ipsecContext = childSa->context->netContext->ipsecContext;
 
    //Close inbound SAD entry
    if(childSa->inboundSa >= 0)
    {
-      ipsecClearSadEntry(netContext.ipsecContext, childSa->inboundSa);
+      ipsecClearSadEntry(ipsecContext, childSa->inboundSa);
    }
 
    //Close outbound SAD entry
    if(childSa->outboundSa >= 0)
    {
-      ipsecClearSadEntry(netContext.ipsecContext, childSa->outboundSa);
+      ipsecClearSadEntry(ipsecContext, childSa->outboundSa);
    }
 
    //Mark the Child SA as closed
@@ -822,7 +831,7 @@ error_t ikeSelectTs(IkeChildSaEntry *childSa, const IkeTsPayload *tsiPayload,
    //A responder uses the traffic selector proposals it receives via an SA
    //management protocol to select an appropriate entry in its SPD (refer to
    //RFC 4301, section 4.4.1)
-   spdEntry = ipsecFindSpdEntry(netContext.ipsecContext,
+   spdEntry = ipsecFindSpdEntry(childSa->context->netContext->ipsecContext,
       IPSEC_POLICY_ACTION_PROTECT, &selector);
    //No matching SPD entry?
    if(spdEntry == NULL)
@@ -1027,12 +1036,16 @@ error_t ikeCheckNonceLength(IkeSaEntry *sa, size_t nonceLen)
 error_t ikeCreateIpsecSaPair(IkeChildSaEntry *childSa)
 {
    error_t error;
+   IpsecContext *ipsecContext;
    IpsecSadEntry sadEntry;
 
    //Debug message
    TRACE_INFO("Creating IPsec SA pair...\r\n");
    TRACE_INFO("  Outbound SPI = 0x%08" PRIX32 "\r\n", LOAD32BE(childSa->remoteSpi));
    TRACE_INFO("  Inbound SPI = 0x%08" PRIX32 "\r\n", LOAD32BE(childSa->localSpi));
+
+   //Point to the IPsec context
+   ipsecContext = childSa->context->netContext->ipsecContext;
 
    //Set SAD entry parameters (outbound traffic)
    osMemset(&sadEntry, 0, sizeof(IpsecSadEntry));
@@ -1089,8 +1102,7 @@ error_t ikeCreateIpsecSaPair(IkeChildSaEntry *childSa)
 #endif
 
    //Update SAD entry (outbound traffic)
-   error = ipsecSetSadEntry(netContext.ipsecContext, childSa->outboundSa,
-      &sadEntry);
+   error = ipsecSetSadEntry(ipsecContext, childSa->outboundSa, &sadEntry);
 
    //Check status code
    if(!error)
@@ -1142,8 +1154,7 @@ error_t ikeCreateIpsecSaPair(IkeChildSaEntry *childSa)
 #endif
 
       //Update SAD entry (inbound traffic)
-      error = ipsecSetSadEntry(netContext.ipsecContext, childSa->inboundSa,
-         &sadEntry);
+      error = ipsecSetSadEntry(ipsecContext, childSa->inboundSa, &sadEntry);
    }
 
    //Return status code

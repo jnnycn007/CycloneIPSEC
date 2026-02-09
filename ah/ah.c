@@ -6,7 +6,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * Copyright (C) 2022-2025 Oryx Embedded SARL. All rights reserved.
+ * Copyright (C) 2022-2026 Oryx Embedded SARL. All rights reserved.
  *
  * This file is part of CycloneIPSEC Open.
  *
@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.5.4
+ * @version 2.6.0
  **/
 
 //Switch to the appropriate trace level
@@ -65,10 +65,17 @@ error_t ipv4ProcessAhHeader(NetInterface *interface,
    size_t n;
    size_t length;
    uint64_t seq;
+   IpsecContext *context;
    IpsecSadEntry *sa;
    AhHeader *ahHeader;
    IpsecSelector selector;
    IpPseudoHeader pseudoHeader;
+
+   //Point to the IPsec context
+   context = interface->netContext->ipsecContext;
+   //Sanity check
+   if(context == NULL)
+      return ERROR_FAILURE;
 
    //Retrieve the length of the payload
    length = netBufferGetLength(buffer) - offset;
@@ -94,7 +101,7 @@ error_t ipv4ProcessAhHeader(NetInterface *interface,
    //Upon receipt of a packet containing an IP Authentication Header, the
    //receiver determines the appropriate (unidirectional) SA via lookup in
    //the SAD (refer to RFC 4302, section 3.4.2)
-   sa = ipsecFindInboundSadEntry(netContext.ipsecContext, IPSEC_PROTOCOL_AH,
+   sa = ipsecFindInboundSadEntry(context, IPSEC_PROTOCOL_AH,
       ntohl(ahHeader->spi));
 
    //If no valid Security Association exists for this packet the receiver
@@ -144,7 +151,7 @@ error_t ipv4ProcessAhHeader(NetInterface *interface,
    //If the received packet falls within the window and is not a duplicate, or
    //if the packet is to the right of the window, then the receiver proceeds to
    //ICV verification
-   error = ahVerifyIcv(sa, ipv4Header, ahHeader, buffer,
+   error = ahVerifyIcv(context, sa, ipv4Header, ahHeader, buffer,
       offset + sizeof(AhHeader) + sa->icvLen);
 
    //If the ICV validation fails, the receiver must discard the received IP
@@ -264,6 +271,7 @@ error_t ipv4ProcessAhHeader(NetInterface *interface,
 
 /**
  * @brief ICV generation
+ * @param[in] context Pointer to the IPsec context
  * @param[in] sa Pointer to the SA
  * @param[in] ipv4Header Pointer to the IPv4 header
  * @param[in,out] ahHeader Pointer to the AH header
@@ -272,20 +280,14 @@ error_t ipv4ProcessAhHeader(NetInterface *interface,
  * @return Error code
  **/
 
-error_t ahGenerateIcv(IpsecSadEntry *sa, const Ipv4Header *ipv4Header,
-   AhHeader *ahHeader, const NetBuffer *buffer, size_t offset)
+error_t ahGenerateIcv(IpsecContext *context, IpsecSadEntry *sa,
+   const Ipv4Header *ipv4Header, AhHeader *ahHeader, const NetBuffer *buffer,
+   size_t offset)
 {
    error_t error;
    uint_t i;
    size_t n;
    uint8_t *p;
-   IpsecContext *context;
-
-   //Point to the IPsec context
-   context = netContext.ipsecContext;
-   //Invalid IPsec context?
-   if(context == NULL)
-      return ERROR_FAILURE;
 
 #if (AH_CMAC_SUPPORT == ENABLED)
    //CMAC integrity algorithm?
@@ -438,6 +440,7 @@ error_t ahGenerateIcv(IpsecSadEntry *sa, const Ipv4Header *ipv4Header,
 
 /**
  * @brief ICV verification
+ * @param[in] context Pointer to the IPsec context
  * @param[in] sa Pointer to the SA
  * @param[in] ipv4Header Pointer to the IPv4 header
  * @param[in] ahHeader Pointer to the AH header
@@ -446,25 +449,19 @@ error_t ahGenerateIcv(IpsecSadEntry *sa, const Ipv4Header *ipv4Header,
  * @return Error code
  **/
 
-error_t ahVerifyIcv(IpsecSadEntry *sa, const Ipv4Header *ipv4Header,
-   const AhHeader *ahHeader, const NetBuffer *buffer, size_t offset)
+error_t ahVerifyIcv(IpsecContext *context, IpsecSadEntry *sa,
+   const Ipv4Header *ipv4Header, const AhHeader *ahHeader,
+   const NetBuffer *buffer, size_t offset)
 {
    error_t error;
    uint8_t mask;
    uint_t i;
    size_t n;
    uint8_t *p;
-   IpsecContext *context;
    Ipv4Header *ipv4Header2;
    AhHeader *ahHeader2;
    uint8_t temp[IPV4_MAX_HEADER_LENGTH];
    uint8_t checksum[AH_MAX_DIGEST_SIZE];
-
-   //Point to the IPsec context
-   context = netContext.ipsecContext;
-   //Invalid IPsec context?
-   if(context == NULL)
-      return ERROR_FAILURE;
 
    //Calculate the length of the IPv4 header
    n = ipv4Header->headerLength * 4;

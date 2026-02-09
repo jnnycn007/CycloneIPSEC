@@ -6,7 +6,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * Copyright (C) 2022-2025 Oryx Embedded SARL. All rights reserved.
+ * Copyright (C) 2022-2026 Oryx Embedded SARL. All rights reserved.
  *
  * This file is part of CycloneIPSEC Open.
  *
@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.5.4
+ * @version 2.6.0
  **/
 
 //Switch to the appropriate trace level
@@ -108,7 +108,7 @@ static const IkeParamName ikeTransformTypeList[] =
    {IKE_TRANSFORM_TYPE_ENCR,   "Encryption Algorithm"},
    {IKE_TRANSFORM_TYPE_PRF,    "Pseudorandom Function"},
    {IKE_TRANSFORM_TYPE_INTEG,  "Integrity Algorithm"},
-   {IKE_TRANSFORM_TYPE_DH,     "Diffie-Hellman Group"},
+   {IKE_TRANSFORM_TYPE_KE,     "Key Exchange Method"},
    {IKE_TRANSFORM_TYPE_ESN,    "Extended Sequence Numbers"},
    {IKE_TRANSFORM_TYPE_ADDKE1, "Additional Key Exchange 1"},
    {IKE_TRANSFORM_TYPE_ADDKE2, "Additional Key Exchange 2"},
@@ -192,37 +192,37 @@ static const IkeParamName ikeAuthAlgoList[] =
    {IKE_TRANSFORM_ID_AUTH_HMAC_SHA2_512_256, "AUTH_HMAC_SHA2_512_256"},
 };
 
-//Diffie-Hellman groups
-static const IkeParamName ikeDhGroupList[] =
+//Key exchange methods
+static const IkeParamName ikeKeAlgoList[] =
 {
-   {IKE_TRANSFORM_ID_DH_GROUP_NONE,              "None"},
-   {IKE_TRANSFORM_ID_DH_GROUP_MODP_768,          "768-bit MODP Group"},
-   {IKE_TRANSFORM_ID_DH_GROUP_MODP_1024,         "1024-bit MODP Group"},
-   {IKE_TRANSFORM_ID_DH_GROUP_MODP_1536,         "1536-bit MODP Group"},
-   {IKE_TRANSFORM_ID_DH_GROUP_MODP_2048,         "2048-bit MODP Group"},
-   {IKE_TRANSFORM_ID_DH_GROUP_MODP_3072,         "3072-bit MODP group"},
-   {IKE_TRANSFORM_ID_DH_GROUP_MODP_4096,         "4096-bit MODP Group"},
-   {IKE_TRANSFORM_ID_DH_GROUP_MODP_6144,         "6144-bit MODP Group"},
-   {IKE_TRANSFORM_ID_DH_GROUP_MODP_8192,         "8192-bit MODP Group"},
-   {IKE_TRANSFORM_ID_DH_GROUP_ECP_256,           "256-bit random ECP Group"},
-   {IKE_TRANSFORM_ID_DH_GROUP_ECP_384,           "384-bit random ECP Group"},
-   {IKE_TRANSFORM_ID_DH_GROUP_ECP_521,           "521-bit random ECP Group"},
-   {IKE_TRANSFORM_ID_DH_GROUP_MODP_1024_160,     "1024-bit MODP Group with 160-bit Prime Order Subgroup"},
-   {IKE_TRANSFORM_ID_DH_GROUP_MODP_2048_224,     "2048-bit MODP Group with 224-bit Prime Order Subgroup"},
-   {IKE_TRANSFORM_ID_DH_GROUP_MODP_2048_256,     "2048-bit MODP Group with 256-bit Prime Order Subgroup"},
-   {IKE_TRANSFORM_ID_DH_GROUP_ECP_192,           "192-bit Random ECP Group"},
-   {IKE_TRANSFORM_ID_DH_GROUP_ECP_224,           "224-bit Random ECP Group"},
-   {IKE_TRANSFORM_ID_DH_GROUP_BRAINPOOLP224R1,   "brainpoolP224r1"},
-   {IKE_TRANSFORM_ID_DH_GROUP_BRAINPOOLP256R1,   "brainpoolP256r1"},
-   {IKE_TRANSFORM_ID_DH_GROUP_BRAINPOOLP384R1,   "brainpoolP384r1"},
-   {IKE_TRANSFORM_ID_DH_GROUP_BRAINPOOLP512R1,   "brainpoolP512r1"},
-   {IKE_TRANSFORM_ID_DH_GROUP_CURVE25519,        "curve25519"},
-   {IKE_TRANSFORM_ID_DH_GROUP_CURVE448,          "curve448"},
-   {IKE_TRANSFORM_ID_DH_GROUP_GOST3410_2012_256, "GOST3410_2012_256"},
-   {IKE_TRANSFORM_ID_DH_GROUP_GOST3410_2012_512, "GOST3410_2012_512"},
-   {IKE_TRANSFORM_ID_DH_GROUP_ML_KEM_512,        "ML-KEM-512"},
-   {IKE_TRANSFORM_ID_DH_GROUP_ML_KEM_768,        "ML-KEM-768"},
-   {IKE_TRANSFORM_ID_DH_GROUP_ML_KEM_1024,       "ML-KEM-1024"},
+   {IKE_TRANSFORM_ID_KE_NONE,              "None"},
+   {IKE_TRANSFORM_ID_KE_MODP_768,          "768-bit MODP Group"},
+   {IKE_TRANSFORM_ID_KE_MODP_1024,         "1024-bit MODP Group"},
+   {IKE_TRANSFORM_ID_KE_MODP_1536,         "1536-bit MODP Group"},
+   {IKE_TRANSFORM_ID_KE_MODP_2048,         "2048-bit MODP Group"},
+   {IKE_TRANSFORM_ID_KE_MODP_3072,         "3072-bit MODP group"},
+   {IKE_TRANSFORM_ID_KE_MODP_4096,         "4096-bit MODP Group"},
+   {IKE_TRANSFORM_ID_KE_MODP_6144,         "6144-bit MODP Group"},
+   {IKE_TRANSFORM_ID_KE_MODP_8192,         "8192-bit MODP Group"},
+   {IKE_TRANSFORM_ID_KE_ECP_256,           "256-bit random ECP Group"},
+   {IKE_TRANSFORM_ID_KE_ECP_384,           "384-bit random ECP Group"},
+   {IKE_TRANSFORM_ID_KE_ECP_521,           "521-bit random ECP Group"},
+   {IKE_TRANSFORM_ID_KE_MODP_1024_160,     "1024-bit MODP Group with 160-bit Prime Order Subgroup"},
+   {IKE_TRANSFORM_ID_KE_MODP_2048_224,     "2048-bit MODP Group with 224-bit Prime Order Subgroup"},
+   {IKE_TRANSFORM_ID_KE_MODP_2048_256,     "2048-bit MODP Group with 256-bit Prime Order Subgroup"},
+   {IKE_TRANSFORM_ID_KE_ECP_192,           "192-bit Random ECP Group"},
+   {IKE_TRANSFORM_ID_KE_ECP_224,           "224-bit Random ECP Group"},
+   {IKE_TRANSFORM_ID_KE_BRAINPOOLP224R1,   "brainpoolP224r1"},
+   {IKE_TRANSFORM_ID_KE_BRAINPOOLP256R1,   "brainpoolP256r1"},
+   {IKE_TRANSFORM_ID_KE_BRAINPOOLP384R1,   "brainpoolP384r1"},
+   {IKE_TRANSFORM_ID_KE_BRAINPOOLP512R1,   "brainpoolP512r1"},
+   {IKE_TRANSFORM_ID_KE_CURVE25519,        "curve25519"},
+   {IKE_TRANSFORM_ID_KE_CURVE448,          "curve448"},
+   {IKE_TRANSFORM_ID_KE_GOST3410_2012_256, "GOST3410_2012_256"},
+   {IKE_TRANSFORM_ID_KE_GOST3410_2012_512, "GOST3410_2012_512"},
+   {IKE_TRANSFORM_ID_KE_ML_KEM_512,        "ML-KEM-512"},
+   {IKE_TRANSFORM_ID_KE_ML_KEM_768,        "ML-KEM-768"},
+   {IKE_TRANSFORM_ID_KE_ML_KEM_1024,       "ML-KEM-1024"},
 };
 
 //Extended sequence numbers
@@ -873,7 +873,7 @@ void ikeDumpTransform(const IkeTransform *transform, size_t length)
    }
    else if(transform->transformType == IKE_TRANSFORM_TYPE_PRF)
    {
-      //Transform type 2 (pseudorandom functions)
+      //Transform type 2 (pseudorandom function)
       algoName = ikeGetParamName(transformId, ikePrfAlgoList,
          arraysize(ikePrfAlgoList));
    }
@@ -883,11 +883,11 @@ void ikeDumpTransform(const IkeTransform *transform, size_t length)
       algoName = ikeGetParamName(transformId, ikeAuthAlgoList,
          arraysize(ikeAuthAlgoList));
    }
-   else if(transform->transformType == IKE_TRANSFORM_TYPE_DH)
+   else if(transform->transformType == IKE_TRANSFORM_TYPE_KE)
    {
-      //Transform type 4 (Diffie-Hellman group)
-      algoName = ikeGetParamName(transformId, ikeDhGroupList,
-         arraysize(ikeDhGroupList));
+      //Transform type 4 (key exchange method)
+      algoName = ikeGetParamName(transformId, ikeKeAlgoList,
+         arraysize(ikeKeAlgoList));
    }
    else if(transform->transformType == IKE_TRANSFORM_TYPE_ESN)
    {
@@ -1034,16 +1034,16 @@ void ikeDumpKePayload(const IkeKePayload *payload, size_t length)
    //Determine the length of the Key Exchange Data field
    n = length - sizeof(IkeKePayload);
 
-   //The Diffie-Hellman Group Num identifies the Diffie-Hellman group in
-   //which the Key Exchange Data was computed
-   groupNum = ntohs(payload->dhGroupNum);
+   //The Key Exchange Method identifies the Diffie-Hellman group in which the
+   //Key Exchange Data was computed
+   groupNum = ntohs(payload->keyExchangeMethod);
 
-   //Convert the Diffie-Hellman Group Num field to string representation
-   groupName = ikeGetParamName(groupNum, ikeDhGroupList,
-      arraysize(ikeDhGroupList));
+   //Convert the Key Exchange Method field to string representation
+   groupName = ikeGetParamName(groupNum, ikeKeAlgoList,
+      arraysize(ikeKeAlgoList));
 
-   //Dump Diffie-Hellman Group Num field
-   TRACE_DEBUG("    Diffie-Hellman Group Num = 0x%" PRIX16 " (%s)\r\n",
+   //Dump Key Exchange Method field
+   TRACE_DEBUG("    Key Exchange Method = 0x%" PRIX16 " (%s)\r\n",
       groupNum, groupName);
 
    //Dump Key Exchange Data field

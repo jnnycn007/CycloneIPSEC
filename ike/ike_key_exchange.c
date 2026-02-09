@@ -6,7 +6,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * Copyright (C) 2022-2025 Oryx Embedded SARL. All rights reserved.
+ * Copyright (C) 2022-2026 Oryx Embedded SARL. All rights reserved.
  *
  * This file is part of CycloneIPSEC Open.
  *
@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.5.4
+ * @version 2.6.0
  **/
 
 //Switch to the appropriate trace level
@@ -99,10 +99,10 @@ error_t ikeGenerateDhKeyPair(IkeSaEntry *sa)
 
 #if (IKE_DH_KE_SUPPORT == ENABLED)
    //Diffie-Hellman key exchange algorithm?
-   if(ikeIsDhKeyExchangeAlgo(sa->dhGroupNum))
+   if(ikeIsDhKeyExchangeAlgo(sa->groupNum))
    {
       //Load Diffie-Hellman parameters
-      error = ikeLoadDhParams(&sa->dhContext.params, sa->dhGroupNum);
+      error = ikeLoadDhParams(&sa->dhContext.params, sa->groupNum);
 
       //Check status code
       if(!error)
@@ -116,12 +116,12 @@ error_t ikeGenerateDhKeyPair(IkeSaEntry *sa)
 #endif
 #if (IKE_ECDH_KE_SUPPORT == ENABLED)
    //ECDH key exchange algorithm?
-   if(ikeIsEcdhKeyExchangeAlgo(sa->dhGroupNum))
+   if(ikeIsEcdhKeyExchangeAlgo(sa->groupNum))
    {
       const EcCurve *curve;
 
       //Get the elliptic curve that matches the specified group number
-      curve = ikeGetEcdhCurve(sa->dhGroupNum);
+      curve = ikeGetEcdhCurve(sa->groupNum);
 
       //Valid elliptic curve?
       if(curve != NULL)
@@ -171,7 +171,7 @@ error_t ikeComputeDhSharedSecret(IkeSaEntry *sa)
 
 #if (IKE_DH_KE_SUPPORT == ENABLED)
    //Diffie-Hellman key exchange algorithm?
-   if(ikeIsDhKeyExchangeAlgo(sa->dhGroupNum))
+   if(ikeIsDhKeyExchangeAlgo(sa->groupNum))
    {
       //Let g^ir be the shared secret from the ephemeral Diffie-Hellman
       //exchange
@@ -182,7 +182,7 @@ error_t ikeComputeDhSharedSecret(IkeSaEntry *sa)
 #endif
 #if (IKE_ECDH_KE_SUPPORT == ENABLED)
    //ECDH key exchange algorithm?
-   if(ikeIsEcdhKeyExchangeAlgo(sa->dhGroupNum))
+   if(ikeIsEcdhKeyExchangeAlgo(sa->groupNum))
    {
       //The Diffie-Hellman shared secret value consists of the x value of the
       //Diffie-Hellman common value (refer to RFC 5903, section 7)
@@ -216,7 +216,7 @@ error_t ikeFormatDhPublicKey(IkeSaEntry *sa, uint8_t *p, size_t *written)
 
 #if (IKE_DH_KE_SUPPORT == ENABLED)
    //Diffie-Hellman key exchange algorithm?
-   if(ikeIsDhKeyExchangeAlgo(sa->dhGroupNum))
+   if(ikeIsDhKeyExchangeAlgo(sa->groupNum))
    {
       //The length of the Diffie-Hellman public value for MODP groups must be
       //equal to the length of the prime modulus over which the exponentiation
@@ -229,7 +229,7 @@ error_t ikeFormatDhPublicKey(IkeSaEntry *sa, uint8_t *p, size_t *written)
 #endif
 #if (IKE_ECDH_KE_SUPPORT == ENABLED)
    //ECDH key exchange algorithm?
-   if(ikeIsEcdhKeyExchangeAlgo(sa->dhGroupNum))
+   if(ikeIsEcdhKeyExchangeAlgo(sa->groupNum))
    {
       //The Diffie-Hellman public value is obtained by concatenating the x and
       //y values (refer to RFC 5903, section 7)
@@ -263,12 +263,12 @@ error_t ikeParseDhPublicKey(IkeSaEntry *sa, const uint8_t *p, size_t length)
 
 #if (IKE_DH_KE_SUPPORT == ENABLED)
    //Diffie-Hellman key exchange algorithm?
-   if(ikeIsDhKeyExchangeAlgo(sa->dhGroupNum))
+   if(ikeIsDhKeyExchangeAlgo(sa->groupNum))
    {
       const IkeDhGroup *dhGroup;
 
       //Get the Diffie-Hellman group that matches the specified group number
-      dhGroup = ikeGetDhGroup(sa->dhGroupNum);
+      dhGroup = ikeGetDhGroup(sa->groupNum);
 
       //Valid Diffie-Hellman group?
       if(dhGroup != NULL)
@@ -280,7 +280,7 @@ error_t ikeParseDhPublicKey(IkeSaEntry *sa, const uint8_t *p, size_t length)
          if(length == dhGroup->pLen)
          {
             //Load Diffie-Hellman parameters
-            error = ikeLoadDhParams(&sa->dhContext.params, sa->dhGroupNum);
+            error = ikeLoadDhParams(&sa->dhContext.params, sa->groupNum);
 
             //Check status code
             if(!error)
@@ -306,12 +306,12 @@ error_t ikeParseDhPublicKey(IkeSaEntry *sa, const uint8_t *p, size_t length)
 #endif
 #if (IKE_ECDH_KE_SUPPORT == ENABLED)
    //ECDH key exchange algorithm?
-   if(ikeIsEcdhKeyExchangeAlgo(sa->dhGroupNum))
+   if(ikeIsEcdhKeyExchangeAlgo(sa->groupNum))
    {
       const EcCurve *curve;
 
       //Get the elliptic curve that matches the specified group number
-      curve = ikeGetEcdhCurve(sa->dhGroupNum);
+      curve = ikeGetEcdhCurve(sa->groupNum);
 
       //Valid elliptic curve?
       if(curve != NULL)
