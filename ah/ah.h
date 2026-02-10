@@ -118,27 +118,6 @@
    #error AH_SHA512_SUPPORT parameter is not valid
 #endif
 
-//SHA3-256 hash support (experimental)
-#ifndef AH_SHA3_256_SUPPORT
-   #define AH_SHA3_256_SUPPORT DISABLED
-#elif (AH_SHA3_256_SUPPORT != ENABLED && AH_SHA3_256_SUPPORT != DISABLED)
-   #error AH_SHA3_256_SUPPORT parameter is not valid
-#endif
-
-//SHA3-384 hash support (experimental)
-#ifndef AH_SHA3_384_SUPPORT
-   #define AH_SHA3_384_SUPPORT DISABLED
-#elif (AH_SHA3_384_SUPPORT != ENABLED && AH_SHA3_384_SUPPORT != DISABLED)
-   #error AH_SHA3_384_SUPPORT parameter is not valid
-#endif
-
-//SHA3-512 hash support (experimental)
-#ifndef AH_SHA3_512_SUPPORT
-   #define AH_SHA3_512_SUPPORT DISABLED
-#elif (AH_SHA3_512_SUPPORT != ENABLED && AH_SHA3_512_SUPPORT != DISABLED)
-   #error AH_SHA3_512_SUPPORT parameter is not valid
-#endif
-
 //SM3 hash support (experimental)
 #ifndef AH_SM3_SUPPORT
    #define AH_SM3_SUPPORT DISABLED

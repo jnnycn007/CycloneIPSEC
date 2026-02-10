@@ -251,27 +251,6 @@
    #error ESP_SHA512_SUPPORT parameter is not valid
 #endif
 
-//SHA3-256 hash support (experimental)
-#ifndef ESP_SHA3_256_SUPPORT
-   #define ESP_SHA3_256_SUPPORT DISABLED
-#elif (ESP_SHA3_256_SUPPORT != ENABLED && ESP_SHA3_256_SUPPORT != DISABLED)
-   #error ESP_SHA3_256_SUPPORT parameter is not valid
-#endif
-
-//SHA3-384 hash support (experimental)
-#ifndef ESP_SHA3_384_SUPPORT
-   #define ESP_SHA3_384_SUPPORT DISABLED
-#elif (ESP_SHA3_384_SUPPORT != ENABLED && ESP_SHA3_384_SUPPORT != DISABLED)
-   #error ESP_SHA3_384_SUPPORT parameter is not valid
-#endif
-
-//SHA3-512 hash support (experimental)
-#ifndef ESP_SHA3_512_SUPPORT
-   #define ESP_SHA3_512_SUPPORT DISABLED
-#elif (ESP_SHA3_512_SUPPORT != ENABLED && ESP_SHA3_512_SUPPORT != DISABLED)
-   #error ESP_SHA3_512_SUPPORT parameter is not valid
-#endif
-
 //SM3 hash support (experimental)
 #ifndef ESP_SM3_SUPPORT
    #define ESP_SM3_SUPPORT DISABLED

@@ -457,13 +457,13 @@ error_t ikeComputePrfPlus(IkeSaEntry *sa, const uint8_t *k, size_t kLen,
    const uint8_t *s, size_t sLen, uint8_t *output, size_t outputLen)
 {
    error_t error;
-   uint8_t c;
 
    //Initialize status code
    error = NO_ERROR;
 
    {
       size_t n;
+      uint8_t c;
       uint8_t t[IKE_MAX_DIGEST_SIZE];
 
       //Keying material will always be derived as the output of the negotiated
