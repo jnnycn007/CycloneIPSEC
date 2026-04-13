@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.0
+ * @version 2.6.2
  **/
 
 #ifndef _IKE_H
@@ -1164,11 +1164,11 @@ typedef enum
    IKE_NOTIFY_MSG_TYPE_USE_ASSIGNED_HOA                    = 42,    //RFC 5026
    IKE_NOTIFY_MSG_TYPE_TEMPORARY_FAILURE                   = 43,    //RFC 7296
    IKE_NOTIFY_MSG_TYPE_CHILD_SA_NOT_FOUND                  = 44,    //RFC 7296
-   IKE_NOTIFY_MSG_TYPE_INVALID_GROUP_ID                    = 45,    //Draft
-   IKE_NOTIFY_MSG_TYPE_AUTHORIZATION_FAILED                = 46,    //Draft
+   IKE_NOTIFY_MSG_TYPE_INVALID_GROUP_ID                    = 45,    //RFC 9838
+   IKE_NOTIFY_MSG_TYPE_AUTHORIZATION_FAILED                = 46,    //RFC 9838
    IKE_NOTIFY_MSG_TYPE_STATE_NOT_FOUND                     = 47,    //RFC 9370
    IKE_NOTIFY_MSG_TYPE_TS_MAX_QUEUE                        = 48,    //RFC 9611
-   IKE_NOTIFY_MSG_TYPE_REGISTRATION_FAILED                 = 49,    //Draft
+   IKE_NOTIFY_MSG_TYPE_REGISTRATION_FAILED                 = 49,    //RFC 9838
    IKE_NOTIFY_MSG_TYPE_INITIAL_CONTACT                     = 16384, //RFC 7296
    IKE_NOTIFY_MSG_TYPE_SET_WINDOW_SIZE                     = 16385, //RFC 7296
    IKE_NOTIFY_MSG_TYPE_ADDITIONAL_TS_POSSIBLE              = 16386, //RFC 7296
@@ -1214,7 +1214,7 @@ typedef enum
    IKE_NOTIFY_MSG_TYPE_PSK_CONFIRM                         = 16426, //RFC 6631
    IKE_NOTIFY_MSG_TYPE_ERX_SUPPORTED                       = 16427, //RFC 6867
    IKE_NOTIFY_MSG_TYPE_IFOM_CAPABILITY                     = 16428, //Draft
-   IKE_NOTIFY_MSG_TYPE_GROUP_SENDER                        = 16429, //Draft
+   IKE_NOTIFY_MSG_TYPE_GROUP_SENDER                        = 16429, //RFC 9838
    IKE_NOTIFY_MSG_TYPE_IKEV2_FRAGMENTATION_SUPPORTED       = 16430, //RFC 7383
    IKE_NOTIFY_MSG_TYPE_SIGNATURE_HASH_ALGORITHMS           = 16431, //RFC 7427
    IKE_NOTIFY_MSG_TYPE_CLONE_IKE_SA_SUPPORTED              = 16432, //RFC 7791
@@ -1230,8 +1230,8 @@ typedef enum
    IKE_NOTIFY_MSG_TYPE_USE_AGGFRAG                         = 16442, //RFC 9347
    IKE_NOTIFY_MSG_TYPE_SUPPORTED_AUTH_METHODS              = 16443, //RFC 9593
    IKE_NOTIFY_MSG_TYPE_SA_RESOURCE_INFO                    = 16444, //RFC 9611
-   IKE_NOTIFY_MSG_TYPE_USE_PPK_INT                         = 16445, //Draft
-   IKE_NOTIFY_MSG_TYPE_PPK_IDENTITY_KEY                    = 16446  //Draft
+   IKE_NOTIFY_MSG_TYPE_USE_PPK_INT                         = 16445, //RFC 9867
+   IKE_NOTIFY_MSG_TYPE_PPK_IDENTITY_KEY                    = 16446  //RFC 9867
 } IkeNotifyMsgType;
 
 

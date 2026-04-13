@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.0
+ * @version 2.6.2
  **/
 
 //Dependencies
@@ -101,8 +101,8 @@ error_t ipsecCheckReplayWindow(const IpsecSadEntry *sa, uint64_t seqNum)
             j = (uint_t) (n / 32);
             k = (uint_t) (n % 32);
 
-            //Duplicate record are rejected through the use of a sliding
-            //receive window
+            //Duplicate record are rejected through the use of a sliding receive
+            //window
             if(sa->antiReplayWindow[j] & (1U << k))
             {
                //The received record is a duplicate
@@ -110,16 +110,16 @@ error_t ipsecCheckReplayWindow(const IpsecSadEntry *sa, uint64_t seqNum)
             }
             else
             {
-               //If the received record falls within the window and is new,
-               //then the receiver proceeds to ICV verification
+               //If the received record falls within the window and is new, then
+               //the receiver proceeds to ICV verification
                error = NO_ERROR;
             }
 
          }
          else
          {
-            //Records that contain sequence numbers lower than the left edge
-            //of the window are rejected
+            //Records that contain sequence numbers lower than the left edge of
+            //the window are rejected
             error = ERROR_INVALID_SEQUENCE_NUMBER;
          }
       }
