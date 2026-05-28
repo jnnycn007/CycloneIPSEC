@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.2
+ * @version 2.6.4
  **/
 
 #ifndef _IPSEC_H
@@ -81,13 +81,13 @@ struct _IpsecContext;
 #endif
 
 //Version string
-#define CYCLONE_IPSEC_VERSION_STRING "2.6.2"
+#define CYCLONE_IPSEC_VERSION_STRING "2.6.4"
 //Major version
 #define CYCLONE_IPSEC_MAJOR_VERSION 2
 //Minor version
 #define CYCLONE_IPSEC_MINOR_VERSION 6
 //Revision number
-#define CYCLONE_IPSEC_REV_NUMBER 2
+#define CYCLONE_IPSEC_REV_NUMBER 4
 
 //IPsec support
 #ifndef IPSEC_SUPPORT
