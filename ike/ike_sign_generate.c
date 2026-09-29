@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 //Switch to the appropriate trace level
@@ -432,7 +432,8 @@ error_t ikeGenerateRsaPssSignature(IkeSaEntry *sa, const uint8_t *id,
    {
       //Generate RSA signature (RSASSA-PSS signature scheme)
       error = rsassaPssSign(context->prngAlgo, context->prngContext,
-         &rsaPrivateKey, hashAlgo, saltLen, digest, signature, signatureLen);
+         &rsaPrivateKey, hashAlgo, hashAlgo, saltLen, digest, signature,
+         signatureLen);
    }
 
    //Free previously allocated memory
@@ -610,7 +611,7 @@ error_t ikeGenerateEd25519Signature(IkeSaEntry *sa, const uint8_t *id,
    const uint8_t *q;
    IkeContext *context;
    EddsaPrivateKey ed25519PrivateKey;
-   DataChunk messageChunks[3];
+   DataFrag messageFrags[3];
    uint8_t macId[IKE_MAX_DIGEST_SIZE];
 
    //Point to the IKE context
@@ -620,7 +621,7 @@ error_t ikeGenerateEd25519Signature(IkeSaEntry *sa, const uint8_t *id,
    eddsaInitPrivateKey(&ed25519PrivateKey);
 
    //Data to be signed is run through the EdDSA algorithm without pre-hashing
-   error = ikeGetSignedOctets(sa, id, idLen, macId, messageChunks,
+   error = ikeGetSignedOctets(sa, id, idLen, macId, messageFrags,
       sa->originalInitiator);
 
    //Check status code
@@ -639,7 +640,7 @@ error_t ikeGenerateEd25519Signature(IkeSaEntry *sa, const uint8_t *id,
 
       //Generate Ed25519 signature
       error = ed25519GenerateSignatureEx(ed25519PrivateKey.d, q,
-         messageChunks, arraysize(messageChunks), NULL, 0, 0, signature);
+         messageFrags, arraysize(messageFrags), NULL, 0, 0, signature);
    }
 
    //Check status code
@@ -679,7 +680,7 @@ error_t ikeGenerateEd448Signature(IkeSaEntry *sa, const uint8_t *id,
    const uint8_t *q;
    IkeContext *context;
    EddsaPrivateKey ed448PrivateKey;
-   DataChunk messageChunks[3];
+   DataFrag messageFrags[3];
    uint8_t macId[IKE_MAX_DIGEST_SIZE];
 
    //Point to the IKE context
@@ -689,7 +690,7 @@ error_t ikeGenerateEd448Signature(IkeSaEntry *sa, const uint8_t *id,
    eddsaInitPrivateKey(&ed448PrivateKey);
 
    //Data to be signed is run through the EdDSA algorithm without pre-hashing
-   error = ikeGetSignedOctets(sa, id, idLen, macId, messageChunks,
+   error = ikeGetSignedOctets(sa, id, idLen, macId, messageFrags,
       sa->originalInitiator);
 
    //Check status code
@@ -707,8 +708,8 @@ error_t ikeGenerateEd448Signature(IkeSaEntry *sa, const uint8_t *id,
       q = (ed448PrivateKey.q.curve != NULL) ? ed448PrivateKey.q.q : NULL;
 
       //Generate Ed448 signature
-      error = ed448GenerateSignatureEx(ed448PrivateKey.d, q, messageChunks,
-         arraysize(messageChunks), NULL, 0, 0, signature);
+      error = ed448GenerateSignatureEx(ed448PrivateKey.d, q, messageFrags,
+         arraysize(messageFrags), NULL, 0, 0, signature);
    }
 
    //Check status code

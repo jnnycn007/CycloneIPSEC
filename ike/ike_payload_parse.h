@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 #ifndef _IKE_PAYLOAD_PARSE_H
@@ -39,7 +39,46 @@
 extern "C" {
 #endif
 
+
+/**
+ * @brief IKE message payloads
+ **/
+
+typedef struct
+{
+   const IkeSaPayload *sa;
+   const IkeKePayload *ke;
+   const IkeIdPayload *idi;
+   const IkeIdPayload *idr;
+   const IkeCertPayload *cert;
+   const IkeCertReqPayload *certReq;
+   const IkeAuthPayload *auth;
+   const IkeNoncePayload *nonce;
+   const IkeTsPayload *tsi;
+   const IkeTsPayload *tsr;
+   const IkeNotifyPayload *useTransportModeNotify;
+   const IkeNotifyPayload *rekeySaNotify;
+#if (IKE_COOKIE_SUPPORT == ENABLED)
+   const IkeNotifyPayload *cookieNotify;
+#endif
+#if (IKE_INITIAL_CONTACT_SUPPORT == ENABLED)
+   const IkeNotifyPayload *initialContactNotify;
+#endif
+#if (IKE_SIGN_HASH_ALGOS_SUPPORT == ENABLED)
+   const IkeNotifyPayload *signHashAlgosNotify;
+#endif
+#if (IKE_NAT_TRAVERSAL_SUPPORT == ENABLED)
+   const IkeNotifyPayload *natDetectSrcIpNotify;
+   const IkeNotifyPayload *natDetectDestIpNotify;
+#endif
+   const IkeNotifyPayload *errorNotify;
+} IkeMessagePayloads;
+
+
 //IKE related functions
+void ikeParseIkeMessagePayloads(const uint8_t *message, size_t length,
+   IkeMessagePayloads *payloads);
+
 error_t ikeParseSaPayload(const IkeSaPayload *saPayload);
 error_t ikeParseProposal(const IkeProposal *proposal, size_t length);
 error_t ikeParseTransform(const IkeTransform *transform, size_t length);
@@ -47,7 +86,8 @@ error_t ikeParseTransform(const IkeTransform *transform, size_t length);
 error_t ikeParseTransformAttr(const IkeTransformAttr *attr, size_t length,
    size_t *consumed);
 
-error_t ikeParseKePayload(IkeSaEntry *sa, const IkeKePayload *kePayload);
+error_t ikeParseKePayload(IkeKeContext *keContext,
+   const IkeKePayload *kePayload);
 
 error_t ikeParseIdPayload(IkeSaEntry *sa, const IkeIdPayload *idPayload);
 
@@ -57,10 +97,7 @@ error_t ikeParseCertReqPayload(IkeSaEntry *sa,
 error_t ikeParseNoncePayload(const IkeNoncePayload *noncePayload,
    uint8_t *nonce, size_t *nonceLen);
 
-error_t ikeParseDeletePayload(IkeSaEntry *sa,
-   const IkeDeletePayload *deletePayload, bool_t response);
-
-error_t ikeParseInvalidKeyPayloadNotification(IkeSaEntry *sa,
+error_t ikeParseInvalidKePayloadNotification(IkeKeContext *keContext,
    const IkeNotifyPayload *notifyPayload);
 
 error_t ikeParseCookieNotification(IkeSaEntry *sa,
@@ -69,7 +106,19 @@ error_t ikeParseCookieNotification(IkeSaEntry *sa,
 error_t ikeParseSignHashAlgosNotification(IkeSaEntry *sa,
    const IkeNotifyPayload *notifyPayload);
 
-error_t ikeParseTs(const uint8_t *p, size_t length, IkeTsParams *tsParams);
+error_t ikeParseNatDetectSrcIpNotification(IkeSaEntry *sa,
+   const uint8_t *message, size_t length);
+
+error_t ikeParseNatDetectDestIpNotification(IkeSaEntry *sa,
+   const IkeNotifyPayload *notifyPayload);
+
+error_t ikeParseDeletePayload(IkeSaEntry *sa,
+   const IkeDeletePayload *deletePayload, bool_t response);
+
+error_t ikeParseTsPayload(const IkeTsPayload *tsPayload, uint_t index,
+   IkeTsEntry *tsEntry);
+
+error_t ikeParseTsEntry(const IkeTs *ts, size_t length, IkeTsEntry *tsEntry);
 
 const IkePayloadHeader *ikeGetPayload(const uint8_t *message, size_t length,
    uint8_t type, uint_t index);
@@ -78,7 +127,7 @@ const IkeNotifyPayload *ikeGetErrorNotifyPayload(const uint8_t *message,
    size_t length);
 
 const IkeNotifyPayload *ikeGetStatusNotifyPayload(const uint8_t *message,
-   size_t length, uint16_t type);
+   size_t length, uint16_t type, uint_t index);
 
 error_t ikeCheckCriticalPayloads(const uint8_t *message, size_t length,
    uint8_t *unsupportedCriticalPayload);

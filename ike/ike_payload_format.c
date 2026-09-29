@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 //Switch to the appropriate trace level
@@ -49,17 +49,17 @@
 
 
 /**
- * @brief Format Security Association payload
+ * @brief Format Security Association payload (IKE protocol)
  * @param[in] sa Pointer to the IKE SA
- * @param[in] childSa Pointer to the Child SA
+ * @param[in] spi Security parameter index (optional parameter)
  * @param[out] p Buffer where to format the payload
  * @param[out] written Length of the resulting payload
  * @param[in,out] nextPayload Pointer to the Next Payload field
  * @return Error code
  **/
 
-error_t ikeFormatSaPayload(IkeSaEntry *sa, IkeChildSaEntry *childSa,
-   uint8_t *p, size_t *written, uint8_t **nextPayload)
+error_t ikeFormatSaPayload(IkeSaEntry *sa, const uint8_t *spi, uint8_t *p,
+   size_t *written, uint8_t **nextPayload)
 {
    error_t error;
    size_t n;
@@ -82,30 +82,8 @@ error_t ikeFormatSaPayload(IkeSaEntry *sa, IkeChildSaEntry *childSa,
    //Point to the Proposals field
    p = saPayload->proposals;
 
-   //Valid Child SA?
-   if(childSa != NULL)
-   {
-      //Format Proposal substructure (AH or ESP protocol)
-      error = ikeFormatChildSaProposal(childSa, childSa->protocol,
-         childSa->localSpi, p, &n);
-   }
-   else
-   {
-      //Format Proposal substructure (IKE protocol)
-      if(sa->state == IKE_SA_STATE_REKEY_REQ && sa->newSa != NULL)
-      {
-         error = ikeFormatSaProposal(sa, sa->newSa->initiatorSpi, p, &n);
-      }
-      else if(sa->state == IKE_SA_STATE_OPEN && sa->newSa != NULL)
-      {
-         error = ikeFormatSaProposal(sa, sa->newSa->responderSpi, p, &n);
-      }
-      else
-      {
-         error = ikeFormatSaProposal(sa, NULL, p, &n);
-      }
-   }
-
+   //Format Proposal substructure
+   error = ikeFormatSaProposal(sa, spi, p, &n);
    //Any error to report?
    if(error)
       return error;
@@ -237,7 +215,7 @@ error_t ikeFormatSaProposal(IkeSaEntry *sa, const uint8_t *spi, uint8_t *p,
 
       //The accepted cryptographic suite must contain exactly one key
       //exchange transform
-      error = ikeAddTransform(IKE_TRANSFORM_TYPE_KE, sa->groupNum, 0,
+      error = ikeAddTransform(IKE_TRANSFORM_TYPE_KE, sa->keContext.groupNum, 0,
          proposal, &lastSubstruc);
       //Any error to report?
       if(error)
@@ -253,17 +231,68 @@ error_t ikeFormatSaProposal(IkeSaEntry *sa, const uint8_t *spi, uint8_t *p,
 
 
 /**
+ * @brief Format Security Association payload (AH or ESP protocol)
+ * @param[in] childSa Pointer to the Child SA
+ * @param[out] p Buffer where to format the payload
+ * @param[out] written Length of the resulting payload
+ * @param[in,out] nextPayload Pointer to the Next Payload field
+ * @return Error code
+ **/
+
+error_t ikeFormatChildSaPayload(IkeChildSaEntry *childSa, uint8_t *p,
+   size_t *written, uint8_t **nextPayload)
+{
+   error_t error;
+   size_t n;
+   IkeSaPayload *saPayload;
+
+   //Fix the Next Payload field of the previous payload
+   **nextPayload = IKE_PAYLOAD_TYPE_SA;
+
+   //Point to the Security Association payload header
+   saPayload = (IkeSaPayload *) p;
+
+   //Format Security Association payload header
+   saPayload->header.nextPayload = IKE_PAYLOAD_TYPE_LAST;
+   saPayload->header.critical = FALSE;
+   saPayload->header.reserved = 0;
+
+   //Length of the payload header
+   *written = sizeof(IkeSaPayload);
+
+   //Point to the Proposals field
+   p = saPayload->proposals;
+
+   //Format Proposal substructure
+   error = ikeFormatChildSaProposal(childSa, p, &n);
+   //Any error to report?
+   if(error)
+      return error;
+
+   //Total length of the payload
+   *written += n;
+
+   //Fix the Payload Length field of the payload header
+   saPayload->header.payloadLength = htons(*written);
+
+   //Keep track of the Next Payload field
+   *nextPayload = &saPayload->header.nextPayload;
+
+   //Successful processing
+   return NO_ERROR;
+}
+
+
+/**
  * @brief Format Proposal substructure (AH or ESP protocol)
  * @param[in] childSa Pointer to the Child SA
- * @param[in] protocolId Protocol identifier (AH or ESP)
- * @param[in] spi Security parameter index
  * @param[out] p Buffer where to format the Proposal substructure
  * @param[out] written Length of the resulting Proposal substructure
  * @return Error code
  **/
 
-error_t ikeFormatChildSaProposal(IkeChildSaEntry *childSa,
-   IpsecProtocol protocolId, const uint8_t *spi, uint8_t *p, size_t *written)
+error_t ikeFormatChildSaProposal(IkeChildSaEntry *childSa, uint8_t *p,
+   size_t *written)
 {
    error_t error;
    size_t n;
@@ -281,7 +310,7 @@ error_t ikeFormatChildSaProposal(IkeChildSaEntry *childSa,
    proposal->lastSubstruc = IKE_LAST_SUBSTRUC_LAST;
    proposal->reserved = 0;
    proposal->proposalLength = 0;
-   proposal->protocolId = protocolId;
+   proposal->protocolId = childSa->protocol;
    proposal->spiSize = IPSEC_SPI_SIZE;
    proposal->numTransforms = 0;
 
@@ -289,7 +318,7 @@ error_t ikeFormatChildSaProposal(IkeChildSaEntry *childSa,
    n = sizeof(IkeProposal);
 
    //Copy the sending entity's SPI
-   osMemcpy(proposal->spi, spi, IPSEC_SPI_SIZE);
+   osMemcpy(proposal->spi, childSa->localSpi, IPSEC_SPI_SIZE);
    //Adjust the length of the Proposal substructure
    n += IPSEC_SPI_SIZE;
 
@@ -312,11 +341,11 @@ error_t ikeFormatChildSaProposal(IkeChildSaEntry *childSa,
 
 #if (AH_SUPPORT == ENABLED)
       //AH protocol identifier?
-      if(protocolId == IPSEC_PROTOCOL_AH)
+      if(childSa->protocol == IPSEC_PROTOCOL_AH)
       {
          //AH generally has two transforms: ESN and an integrity check
          //algorithm
-         error = ahAddSupportedTransforms(context, proposal, &lastSubstruc);
+         error = ahAddSupportedTransforms(childSa, proposal, &lastSubstruc);
          //Any error to report?
          if(error)
             return error;
@@ -325,11 +354,11 @@ error_t ikeFormatChildSaProposal(IkeChildSaEntry *childSa,
 #endif
 #if (ESP_SUPPORT == ENABLED)
       //ESP protocol identifier?
-      if(protocolId == IPSEC_PROTOCOL_ESP)
+      if(childSa->protocol == IPSEC_PROTOCOL_ESP)
       {
          //ESP generally has three transforms: ESN, an encryption algorithm
          //and an integrity check algorithm
-         error = espAddSupportedTransforms(context, proposal, &lastSubstruc);
+         error = espAddSupportedTransforms(childSa, proposal, &lastSubstruc);
          //Any error to report?
          if(error)
             return error;
@@ -351,7 +380,7 @@ error_t ikeFormatChildSaProposal(IkeChildSaEntry *childSa,
 
 #if (AH_SUPPORT == ENABLED)
       //AH protocol identifier?
-      if(protocolId == IPSEC_PROTOCOL_AH)
+      if(childSa->protocol == IPSEC_PROTOCOL_AH)
       {
          //The accepted proposal contains a single integrity transform
          error = ikeAddTransform(IKE_TRANSFORM_TYPE_INTEG,
@@ -360,6 +389,18 @@ error_t ikeFormatChildSaProposal(IkeChildSaEntry *childSa,
          if(error)
             return error;
 
+#if (IKE_CHILD_SA_PFS_SUPPORT == ENABLED)
+         //Perfect forward secrecy?
+         if(childSa->pfs)
+         {
+            //The accepted proposal contains a single key exchange transform
+            error = ikeAddTransform(IKE_TRANSFORM_TYPE_KE,
+               childSa->keContext.groupNum, 0, proposal, &lastSubstruc);
+            //Any error to report?
+            if(error)
+               return error;
+         }
+#endif
          //The accepted proposal contains a single ESN transform
          error = ikeAddTransform(IKE_TRANSFORM_TYPE_ESN, childSa->esn,
             0, proposal, &lastSubstruc);
@@ -371,7 +412,7 @@ error_t ikeFormatChildSaProposal(IkeChildSaEntry *childSa,
 #endif
 #if (ESP_SUPPORT == ENABLED)
       //ESP protocol identifier?
-      if(protocolId == IPSEC_PROTOCOL_ESP)
+      if(childSa->protocol == IPSEC_PROTOCOL_ESP)
       {
          //The accepted proposal contains a single encryption transform
          error = ikeAddTransform(IKE_TRANSFORM_TYPE_ENCR, childSa->encAlgoId,
@@ -399,6 +440,18 @@ error_t ikeFormatChildSaProposal(IkeChildSaEntry *childSa,
          if(error)
             return error;
 
+#if (IKE_CHILD_SA_PFS_SUPPORT == ENABLED)
+         //Perfect forward secrecy?
+         if(childSa->pfs)
+         {
+            //The accepted proposal contains a single key exchange transform
+            error = ikeAddTransform(IKE_TRANSFORM_TYPE_KE,
+               childSa->keContext.groupNum, 0, proposal, &lastSubstruc);
+            //Any error to report?
+            if(error)
+               return error;
+         }
+#endif
          //The accepted proposal contains a single ESN transform
          error = ikeAddTransform(IKE_TRANSFORM_TYPE_ESN, childSa->esn,
             0, proposal, &lastSubstruc);
@@ -425,14 +478,14 @@ error_t ikeFormatChildSaProposal(IkeChildSaEntry *childSa,
 
 /**
  * @brief Format Key Exchange payload
- * @param[in] sa Pointer to the IKE SA
+ * @param[in] keContext Pointer to the key exchange context
  * @param[out] p Buffer where to format the payload
  * @param[out] written Length of the resulting payload
  * @param[in,out] nextPayload Pointer to the Next Payload field
  * @return Error code
  **/
 
-error_t ikeFormatKePayload(IkeSaEntry *sa, uint8_t *p, size_t *written,
+error_t ikeFormatKePayload(IkeKeContext *keContext, uint8_t *p, size_t *written,
    uint8_t **nextPayload)
 {
    error_t error;
@@ -452,7 +505,7 @@ error_t ikeFormatKePayload(IkeSaEntry *sa, uint8_t *p, size_t *written,
 
    //The Key Exchange Method identifies the Diffie-Hellman group in which the
    //Key Exchange Data was computed
-   kePayload->keyExchangeMethod = htons(sa->groupNum);
+   kePayload->keyExchangeMethod = htons(keContext->groupNum);
 
    //For forward compatibility, all fields marked RESERVED must be set to
    //zero (refer to RFC 7296, section 2.5)
@@ -460,7 +513,7 @@ error_t ikeFormatKePayload(IkeSaEntry *sa, uint8_t *p, size_t *written,
 
    //A Key Exchange payload is constructed by copying one's Diffie-Hellman
    //public value into the Key Exchange Data portion of the payload
-   error = ikeFormatDhPublicKey(sa, kePayload->keyExchangeData, &n);
+   error = ikeFormatPublicKey(keContext, kePayload->keyExchangeData, &n);
    //Any error to report?
    if(error)
       return error;
@@ -1030,7 +1083,7 @@ error_t ikeFormatNotifyPayload(IkeSaEntry *sa, IkeChildSaEntry *childSa,
    {
       //The responder indicate its preferred Diffie-Hellman group in the
       //INVALID_KE_PAYLOAD Notify payload
-      STORE16BE(sa->groupNum, notifyPayload->spi);
+      STORE16BE(sa->preferredGroupNum, notifyPayload->spi);
 
       //Total length of the payload
       *written += sizeof(uint16_t);
@@ -1051,6 +1104,36 @@ error_t ikeFormatNotifyPayload(IkeSaEntry *sa, IkeChildSaEntry *childSa,
 
       //Total length of the payload
       *written += notifyPayload->spiSize;
+   }
+   else if(notifyMsgType == IKE_NOTIFY_MSG_TYPE_NAT_DETECTION_SOURCE_IP)
+   {
+      //The data associated with the NAT_DETECTION_SOURCE_IP notification is a
+      //SHA-1 digest of the SPIs (in the order they appear in the header), IP
+      //address, and port from which this packet was sent
+      error = ikeFormatNatDetectSrcIpNotificationData(sa, notifyPayload->spi,
+         &n);
+
+      //Check status code
+      if(!error)
+      {
+         //Total length of the payload
+         *written += n;
+      }
+   }
+   else if(notifyMsgType == IKE_NOTIFY_MSG_TYPE_NAT_DETECTION_DESTINATION_IP)
+   {
+      //The data associated with the NAT_DETECTION_DESTINATION_IP notification
+      //is a SHA-1 digest of the SPIs (in the order they appear in the header),
+      //IP address, and port to which this packet was sent
+      error = ikeFormatNatDetectDestIpNotificationData(sa, notifyPayload->spi,
+         &n);
+
+      //Check status code
+      if(!error)
+      {
+         //Total length of the payload
+         *written += n;
+      }
    }
    else if(notifyMsgType == IKE_NOTIFY_MSG_TYPE_COOKIE)
    {
@@ -1116,6 +1199,153 @@ error_t ikeFormatNotifyPayload(IkeSaEntry *sa, IkeChildSaEntry *childSa,
 
 
 /**
+ * @brief Format NAT_DETECTION_SOURCE_IP notification data
+ * @param[in] sa Pointer to the IKE SA
+ * @param[out] p Buffer where to format the notification data
+ * @param[out] written Length of the notification data, in bytes
+ * @return Error code
+ **/
+
+error_t ikeFormatNatDetectSrcIpNotificationData(IkeSaEntry *sa, uint8_t *p,
+   size_t *written)
+{
+#if (IKE_NAT_TRAVERSAL_SUPPORT == ENABLED)
+   error_t error;
+   IpAddr localIpAddr;
+   uint16_t localPort;
+   NetInterface *interface;
+   IkeContext *context;
+   Sha1Context sha1Context;
+
+   //Point to the IKE context
+   context = sa->context;
+
+   //Check whether the entity is the original initiator of the IKE SA
+   if(sa->originalInitiator)
+   {
+      //Point to the network interface
+      interface = context->interface;
+
+      //Get exclusive access
+      netLock(context->netContext);
+
+      //Retrieve the IP address of the host
+      error = ipSelectSourceAddr(context->netContext, &interface,
+         &sa->remoteIpAddr, &localIpAddr);
+
+      //Release exclusive access
+      netUnlock(context->netContext);
+
+      //Any error to report?
+      if(error)
+         return error;
+
+      //Convert the source port number to network byte order
+      if(sa->localNat || sa->remoteNat)
+      {
+         localPort = HTONS(IPSEC_NAT_PORT);
+      }
+      else
+      {
+         localPort = HTONS(IKE_PORT);
+      }
+   }
+   else
+   {
+      //Retrieve the IP address of the host
+      localIpAddr = context->localIpAddr;
+      //Convert the source port number to network byte order
+      localPort = htons(context->localPort);
+   }
+
+   //The data associated with the NAT_DETECTION_SOURCE_IP notification is a
+   //SHA-1 digest of the SPIs (in the order they appear in the header), IP
+   //address, and port from which this packet was sent
+   sha1Init(&sha1Context);
+   sha1Update(&sha1Context, sa->initiatorSpi, IKE_SPI_SIZE);
+   sha1Update(&sha1Context, sa->responderSpi, IKE_SPI_SIZE);
+   sha1Update(&sha1Context, localIpAddr.addr, localIpAddr.length);
+   sha1Update(&sha1Context, &localPort, sizeof(localPort));
+   sha1Final(&sha1Context, p);
+
+   //Set the length of the notification data
+   *written = SHA1_DIGEST_SIZE;
+
+   //Successful processing
+   return NO_ERROR;
+#else
+   //Minimal implementations are not required to support NAT traversal
+   return ERROR_NOT_IMPLEMENTED;
+#endif
+}
+
+
+/**
+ * @brief Format NAT_DETECTION_DESTINATION_IP notification data
+ * @param[in] sa Pointer to the IKE SA
+ * @param[out] p Buffer where to format the notification data
+ * @param[out] written Length of the notification data, in bytes
+ * @return Error code
+ **/
+
+error_t ikeFormatNatDetectDestIpNotificationData(IkeSaEntry *sa, uint8_t *p,
+   size_t *written)
+{
+#if (IKE_NAT_TRAVERSAL_SUPPORT == ENABLED)
+   IpAddr remoteIpAddr;
+   uint16_t remotePort;
+   IkeContext *context;
+   Sha1Context sha1Context;
+
+   //Point to the IKE context
+   context = sa->context;
+
+   //Check whether the entity is the original initiator of the IKE SA
+   if(sa->originalInitiator)
+   {
+      //Get the recipient IP address
+      remoteIpAddr = sa->remoteIpAddr;
+
+      //Convert the destination port number to network byte order
+      if(sa->localNat || sa->remoteNat)
+      {
+         remotePort = HTONS(IPSEC_NAT_PORT);
+      }
+      else
+      {
+         remotePort = HTONS(IKE_PORT);
+      }
+   }
+   else
+   {
+      //Get the recipient IP address and port number
+      remoteIpAddr = context->remoteIpAddr;
+      remotePort = htons(context->remotePort);
+   }
+
+   //The data associated with the NAT_DETECTION_DESTINATION_IP notification is
+   //a SHA-1 digest of the SPIs (in the order they appear in the header), IP
+   //address, and port to which this packet was sent
+   sha1Init(&sha1Context);
+   sha1Update(&sha1Context, sa->initiatorSpi, IKE_SPI_SIZE);
+   sha1Update(&sha1Context, sa->responderSpi, IKE_SPI_SIZE);
+   sha1Update(&sha1Context, remoteIpAddr.addr, remoteIpAddr.length);
+   sha1Update(&sha1Context, &remotePort, sizeof(remotePort));
+   sha1Final(&sha1Context, p);
+
+   //Set the length of the notification data
+   *written = SHA1_DIGEST_SIZE;
+
+   //Successful processing
+   return NO_ERROR;
+#else
+   //Minimal implementations are not required to support NAT traversal
+   return ERROR_NOT_IMPLEMENTED;
+#endif
+}
+
+
+/**
  * @brief Format SIGNATURE_HASH_ALGORITHMS notification data
  * @param[in] sa Pointer to the IKE SA
  * @param[out] p Buffer where to format the notification data
@@ -1126,6 +1356,7 @@ error_t ikeFormatNotifyPayload(IkeSaEntry *sa, IkeChildSaEntry *childSa,
 error_t ikeFormatSignHashAlgosNotificationData(IkeSaEntry *sa, uint8_t *p,
    size_t *written)
 {
+#if (IKE_SIGN_HASH_ALGOS_SUPPORT == ENABLED)
    //The Notification Data field contains the list of 16-bit hash algorithm
    //identifiers
    *written = 0;
@@ -1179,6 +1410,10 @@ error_t ikeFormatSignHashAlgosNotificationData(IkeSaEntry *sa, uint8_t *p,
 
    //Successful processing
    return NO_ERROR;
+#else
+   //The SIGNATURE_HASH_ALGORITHMS notification is not supported
+   return ERROR_NOT_IMPLEMENTED;
+#endif
 }
 
 
@@ -1260,7 +1495,7 @@ error_t ikeFormatTsiPayload(IkeChildSaEntry *childSa, uint8_t *p,
 {
    error_t error;
    size_t n;
-   IkeTsParams tsParams;
+   IkeTsEntry tsEntry;
    IkeTsPayload *tsPayload;
    IpsecSelector *selector;
 
@@ -1277,9 +1512,8 @@ error_t ikeFormatTsiPayload(IkeChildSaEntry *childSa, uint8_t *p,
    tsPayload->header.nextPayload = IKE_PAYLOAD_TYPE_LAST;
    tsPayload->header.critical = FALSE;
    tsPayload->header.reserved = 0;
+   tsPayload->numTs = 0;
 
-   //Set the number of Traffic Selectors being provided
-   tsPayload->numTs = 1;
    //The reserved field must be sent as zero
    osMemset(tsPayload->reserved, 0, 3);
 
@@ -1289,41 +1523,96 @@ error_t ikeFormatTsiPayload(IkeChildSaEntry *childSa, uint8_t *p,
    //Point to the Traffic Selectors field
    p = tsPayload->trafficSelectors;
 
-   //TSi specifies the source address of traffic forwarded from (or the
-   //destination address of traffic forwarded to) the initiator of the
-   //Child SA pair (refer to RFC 7296, section 2.9)
+   //Check whether the entity is the initiator of the exchange
    if(childSa->initiator)
    {
-      tsParams.startAddr = selector->localIpAddr.start;
-      tsParams.endAddr = selector->localIpAddr.end;
-      tsParams.ipProtocolId = selector->nextProtocol;
-      tsParams.startPort = selector->localPort.start;
-      tsParams.endPort = selector->localPort.end;
+#if (IKE_SPECIFIC_TS_SUPPORT == ENABLED)
+      //If the initiator has requested the SA due to a data packet, the
+      //initiator should include as the first Traffic Selector in each of TSi
+      //and TSr a very specific Traffic Selector including the addresses in
+      //the packet triggering the request (refer to RFC 7296, section 2.9)
+      if(childSa->state == IKE_CHILD_SA_STATE_INIT)
+      {
+         //The very specific first Traffic Selector helps the responder to
+         //select the correct range
+         tsEntry.startAddr = childSa->packetInfo.localIpAddr;
+         tsEntry.endAddr = childSa->packetInfo.localIpAddr;
+         tsEntry.ipProtocolId = childSa->packetInfo.nextProtocol;
+         tsEntry.startPort = childSa->packetInfo.localPort;
+         tsEntry.endPort = childSa->packetInfo.localPort;
+
+         //The Traffic Selector payload may contain multiple Traffic Selector
+         //substructures
+         if(!ipCompAddr(&selector->localIpAddr.start, &tsEntry.startAddr) ||
+            !ipCompAddr(&selector->localIpAddr.end, &tsEntry.endAddr) ||
+            selector->nextProtocol != tsEntry.ipProtocolId ||
+            selector->localPort.start != tsEntry.startPort ||
+            selector->localPort.end != tsEntry.endPort)
+         {
+            //Format Traffic Selector substructure
+            error = ikeFormatTsEntry(&tsEntry, p, &n);
+            //Any error to report?
+            if(error)
+               return error;
+
+            //Point to the next substructure
+            p += n;
+            *written += n;
+
+            //Adjust the number of Traffic Selector substructures
+            tsPayload->numTs++;
+
+            //The second traffic selector contains a range of IP addresses
+            //and ports
+            tsEntry.startAddr = selector->localIpAddr.start;
+            tsEntry.endAddr = selector->localIpAddr.end;
+            tsEntry.ipProtocolId = selector->nextProtocol;
+            tsEntry.startPort = selector->localPort.start;
+            tsEntry.endPort = selector->localPort.end;
+         }
+      }
+      else
+#endif
+      {
+         //TSi specifies the source address of traffic forwarded from (or the
+         //destination address of traffic forwarded to) the initiator of the
+         //Child SA pair (refer to RFC 7296, section 2.9)
+         tsEntry.startAddr = selector->localIpAddr.start;
+         tsEntry.endAddr = selector->localIpAddr.end;
+         tsEntry.ipProtocolId = selector->nextProtocol;
+         tsEntry.startPort = selector->localPort.start;
+         tsEntry.endPort = selector->localPort.end;
+      }
    }
    else
    {
-      tsParams.startAddr = selector->remoteIpAddr.start;
-      tsParams.endAddr = selector->remoteIpAddr.end;
-      tsParams.ipProtocolId = selector->nextProtocol;
-      tsParams.startPort = selector->remotePort.start;
-      tsParams.endPort = selector->remotePort.end;
+      //TSi specifies the source address of traffic forwarded from (or the
+      //destination address of traffic forwarded to) the initiator of the Child
+      //SA pair (refer to RFC 7296, section 2.9)
+      tsEntry.startAddr = selector->remoteIpAddr.start;
+      tsEntry.endAddr = selector->remoteIpAddr.end;
+      tsEntry.ipProtocolId = selector->nextProtocol;
+      tsEntry.startPort = selector->remotePort.start;
+      tsEntry.endPort = selector->remotePort.end;
    }
 
    //Format Traffic Selector substructure
-   error = ikeFormatTs(&tsParams, p, &n);
+   error = ikeFormatTsEntry(&tsEntry, p, &n);
+   //Any error to report?
+   if(error)
+      return error;
 
-   //Check status code
-   if(!error)
-   {
-      //Total length of the payload
-      *written += n;
+   //Total length of the payload
+   *written += n;
 
-      //Fix the Payload Length field of the payload header
-      tsPayload->header.payloadLength = htons(*written);
+   //Adjust the number of Traffic Selector substructures
+   tsPayload->numTs++;
 
-      //Keep track of the Next Payload field
-      *nextPayload = &tsPayload->header.nextPayload;
-   }
+   //Fix the Payload Length field of the payload header
+   tsPayload->header.payloadLength = htons(*written);
+
+   //Keep track of the Next Payload field
+   *nextPayload = &tsPayload->header.nextPayload;
 
    //Return status code
    return error;
@@ -1344,7 +1633,7 @@ error_t ikeFormatTsrPayload(IkeChildSaEntry *childSa, uint8_t *p,
 {
    error_t error;
    size_t n;
-   IkeTsParams tsParams;
+   IkeTsEntry tsEntry;
    IkeTsPayload *tsPayload;
    IpsecSelector *selector;
 
@@ -1361,9 +1650,8 @@ error_t ikeFormatTsrPayload(IkeChildSaEntry *childSa, uint8_t *p,
    tsPayload->header.nextPayload = IKE_PAYLOAD_TYPE_LAST;
    tsPayload->header.critical = FALSE;
    tsPayload->header.reserved = 0;
+   tsPayload->numTs = 0;
 
-   //Set the number of Traffic Selectors being provided
-   tsPayload->numTs = 1;
    //The reserved field must be sent as zero
    osMemset(tsPayload->reserved, 0, 3);
 
@@ -1373,41 +1661,98 @@ error_t ikeFormatTsrPayload(IkeChildSaEntry *childSa, uint8_t *p,
    //Point to the Traffic Selectors field
    p = tsPayload->trafficSelectors;
 
-   //TSr specifies the source address of traffic forwarded from (or the
-   //destination address of traffic forwarded to) the responder of the
-   //Child SA pair (refer to RFC 7296, section 2.9)
+   //Check whether the entity is the initiator of the exchange
    if(childSa->initiator)
    {
-      tsParams.startAddr = selector->remoteIpAddr.start;
-      tsParams.endAddr = selector->remoteIpAddr.end;
-      tsParams.ipProtocolId = selector->nextProtocol;
-      tsParams.startPort = selector->remotePort.start;
-      tsParams.endPort = selector->remotePort.end;
+#if (IKE_SPECIFIC_TS_SUPPORT == ENABLED)
+      //If the initiator has requested the SA due to a data packet, the
+      //initiator should include as the first Traffic Selector in each of TSi
+      //and TSr a very specific Traffic Selector including the addresses in
+      //the packet triggering the request (refer to RFC 7296, section 2.9)
+      if(childSa->state == IKE_CHILD_SA_STATE_INIT &&
+         (childSa->packetInfo.nextProtocol == IPV4_PROTOCOL_UDP ||
+         childSa->packetInfo.nextProtocol == IPV4_PROTOCOL_TCP))
+      {
+         //The very specific first Traffic Selector helps the responder to
+         //select the correct range
+         tsEntry.startAddr = childSa->packetInfo.remoteIpAddr;
+         tsEntry.endAddr = childSa->packetInfo.remoteIpAddr;
+         tsEntry.ipProtocolId = childSa->packetInfo.nextProtocol;
+         tsEntry.startPort = childSa->packetInfo.remotePort;
+         tsEntry.endPort = childSa->packetInfo.remotePort;
+
+         //The Traffic Selector payload may contain multiple Traffic Selector
+         //substructures
+         if(!ipCompAddr(&selector->remoteIpAddr.start, &tsEntry.startAddr) ||
+            !ipCompAddr(&selector->remoteIpAddr.end, &tsEntry.endAddr) ||
+            selector->nextProtocol != tsEntry.ipProtocolId ||
+            selector->remotePort.start != tsEntry.startPort ||
+            selector->remotePort.end != tsEntry.endPort)
+         {
+            //Format Traffic Selector substructure
+            error = ikeFormatTsEntry(&tsEntry, p, &n);
+            //Any error to report?
+            if(error)
+               return error;
+
+            //Point to the next substructure
+            p += n;
+            *written += n;
+
+            //Adjust the number of Traffic Selector substructures
+            tsPayload->numTs++;
+
+            //The second traffic selector contains a range of IP addresses
+            //and ports
+            tsEntry.startAddr = selector->remoteIpAddr.start;
+            tsEntry.endAddr = selector->remoteIpAddr.end;
+            tsEntry.ipProtocolId = selector->nextProtocol;
+            tsEntry.startPort = selector->remotePort.start;
+            tsEntry.endPort = selector->remotePort.end;
+         }
+      }
+      else
+#endif
+      {
+         //TSr specifies the source address of traffic forwarded from (or the
+         //destination address of traffic forwarded to) the responder of the
+         //Child SA pair (refer to RFC 7296, section 2.9)
+         tsEntry.startAddr = selector->remoteIpAddr.start;
+         tsEntry.endAddr = selector->remoteIpAddr.end;
+         tsEntry.ipProtocolId = selector->nextProtocol;
+         tsEntry.startPort = selector->remotePort.start;
+         tsEntry.endPort = selector->remotePort.end;
+      }
    }
    else
    {
-      tsParams.startAddr = selector->localIpAddr.start;
-      tsParams.endAddr = selector->localIpAddr.end;
-      tsParams.ipProtocolId = selector->nextProtocol;
-      tsParams.startPort = selector->localPort.start;
-      tsParams.endPort = selector->localPort.end;
+      //TSr specifies the source address of traffic forwarded from (or the
+      //destination address of traffic forwarded to) the responder of the Child
+      //SA pair (refer to RFC 7296, section 2.9)
+      tsEntry.startAddr = selector->localIpAddr.start;
+      tsEntry.endAddr = selector->localIpAddr.end;
+      tsEntry.ipProtocolId = selector->nextProtocol;
+      tsEntry.startPort = selector->localPort.start;
+      tsEntry.endPort = selector->localPort.end;
    }
 
    //Format Traffic Selector substructure
-   error = ikeFormatTs(&tsParams, p, &n);
+   error = ikeFormatTsEntry(&tsEntry, p, &n);
+   //Any error to report?
+   if(error)
+      return error;
 
-   //Check status code
-   if(!error)
-   {
-      //Total length of the payload
-      *written += n;
+   //Total length of the payload
+   *written += n;
 
-      //Fix the Payload Length field of the payload header
-      tsPayload->header.payloadLength = htons(*written);
+   //Adjust the number of Traffic Selector substructures
+   tsPayload->numTs++;
 
-      //Keep track of the Next Payload field
-      *nextPayload = &tsPayload->header.nextPayload;
-   }
+   //Fix the Payload Length field of the payload header
+   tsPayload->header.payloadLength = htons(*written);
+
+   //Keep track of the Next Payload field
+   *nextPayload = &tsPayload->header.nextPayload;
 
    //Return status code
    return error;
@@ -1416,13 +1761,14 @@ error_t ikeFormatTsrPayload(IkeChildSaEntry *childSa, uint8_t *p,
 
 /**
  * @brief Format Traffic Selector substructure
- * @param[in] tsParams Traffic selector parameters
+ * @param[in] tsEntry Traffic selector entry
  * @param[out] p Buffer where to format the Traffic Selector substructure
  * @param[out] written Length of the resulting Traffic Selector substructure
  * @return Error code
  **/
 
-error_t ikeFormatTs(const IkeTsParams *tsParams, uint8_t *p, size_t *written)
+error_t ikeFormatTsEntry(const IkeTsEntry *tsEntry, uint8_t *p,
+   size_t *written)
 {
    error_t error;
    IkeTs *ts;
@@ -1434,24 +1780,24 @@ error_t ikeFormatTs(const IkeTsParams *tsParams, uint8_t *p, size_t *written)
    ts = (IkeTs *) p;
 
    //Format Traffic Selector substructure
-   ts->ipProtocolId = tsParams->ipProtocolId;
-   ts->startPort = htons(tsParams->startPort);
-   ts->endPort = htons(tsParams->endPort);
+   ts->ipProtocolId = tsEntry->ipProtocolId;
+   ts->startPort = htons(tsEntry->startPort);
+   ts->endPort = htons(tsEntry->endPort);
 
    //Length of the substructure
    *written = sizeof(IkeTs);
 
 #if (IPV4_SUPPORT == ENABLED)
    //IPv4 address range?
-   if(tsParams->startAddr.length == sizeof(Ipv4Addr) &&
-      tsParams->endAddr.length == sizeof(Ipv4Addr))
+   if(tsEntry->startAddr.length == sizeof(Ipv4Addr) &&
+      tsEntry->endAddr.length == sizeof(Ipv4Addr))
    {
       //Specify the type of Traffic Selector
       ts->tsType = IKE_TS_TYPE_IPV4_ADDR_RANGE;
 
       //A range of IPv4 addresses is represented by two four-octet values
-      ipv4CopyAddr(ts->startAddr, &tsParams->startAddr.ipv4Addr);
-      ipv4CopyAddr(ts->startAddr + sizeof(Ipv4Addr), &tsParams->endAddr.ipv4Addr);
+      ipv4CopyAddr(ts->startAddr, &tsEntry->startAddr.ipv4Addr);
+      ipv4CopyAddr(ts->startAddr + sizeof(Ipv4Addr), &tsEntry->endAddr.ipv4Addr);
 
       //The length of the selector depends on the TS Type field
       *written += 2 * sizeof(Ipv4Addr);
@@ -1460,15 +1806,15 @@ error_t ikeFormatTs(const IkeTsParams *tsParams, uint8_t *p, size_t *written)
 #endif
 #if (IPV6_SUPPORT == ENABLED)
    //IPv6 address range?
-   if(tsParams->startAddr.length == sizeof(Ipv6Addr) &&
-      tsParams->endAddr.length == sizeof(Ipv6Addr))
+   if(tsEntry->startAddr.length == sizeof(Ipv6Addr) &&
+      tsEntry->endAddr.length == sizeof(Ipv6Addr))
    {
       //Specify the type of Traffic Selector
       ts->tsType = IKE_TS_TYPE_IPV6_ADDR_RANGE;
 
       //A range of IPv6 addresses is represented by two sixteen-octet values
-      ipv6CopyAddr(ts->startAddr, &tsParams->startAddr.ipv6Addr);
-      ipv6CopyAddr(ts->startAddr + sizeof(Ipv6Addr), &tsParams->endAddr.ipv6Addr);
+      ipv6CopyAddr(ts->startAddr, &tsEntry->startAddr.ipv6Addr);
+      ipv6CopyAddr(ts->startAddr + sizeof(Ipv6Addr), &tsEntry->endAddr.ipv6Addr);
 
       //The length of the selector depends on the TS Type field
       *written += 2 * sizeof(Ipv6Addr);

@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 #ifndef _IKE_MISC_H
@@ -62,19 +62,37 @@ IkeChildSaEntry *ikeFindChildSaEntry(IkeSaEntry *sa, uint8_t protocolId,
 
 void ikeDeleteChildSaEntry(IkeChildSaEntry *childSa);
 
+void ikeInheritChildSas(IkeSaEntry *newSa, IkeSaEntry *oldSa);
+
 error_t ikeGenerateSaSpi(IkeSaEntry *sa, uint8_t *spi);
 error_t ikeGenerateChildSaSpi(IkeChildSaEntry *childSa, uint8_t *spi);
 error_t ikeGenerateNonce(IkeContext *context, uint8_t *nonce, size_t *length);
 
 systime_t ikeRandomizeDelay(IkeContext *context, systime_t delay);
 
+void ikeSubstituteId(IkeSaEntry *sa);
+
 error_t ikeSelectTs(IkeChildSaEntry *childSa, const IkeTsPayload *tsiPayload,
    const IkeTsPayload *tsrPayload);
 
 error_t ikeCheckTs(IkeChildSaEntry *childSa, const IkeTsPayload *tsiPayload,
-   const IkeTsPayload *tsrPayload);
+   const IkeTsPayload *tsrPayload, bool_t rekey);
+
+void ikeCopyLocalTsEntry(IkeChildSaEntry *childSa, IpsecSelector *selector,
+   const IkeTsEntry *tsEntry);
+
+void ikeCopyRemoteTsEntry(IkeChildSaEntry *childSa, IpsecSelector *selector,
+   const IkeTsEntry *tsEntry);
 
 error_t ikeCheckNonceLength(IkeSaEntry *sa, size_t nonceLen);
+
+int_t ikeCompareNonces(const uint8_t *nonce1, size_t nonceLen1,
+   const uint8_t *nonce2, size_t nonceLen2);
+
+int_t ikeCompareSaNonces(IkeSaEntry *sa1, IkeSaEntry *sa2);
+
+int_t ikeCompareChildSaNonces(IkeChildSaEntry *childSa1,
+   IkeChildSaEntry *childSa2);
 
 error_t ikeCreateIpsecSaPair(IkeChildSaEntry *childSa);
 

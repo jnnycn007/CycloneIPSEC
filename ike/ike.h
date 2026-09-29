@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 #ifndef _IKE_H
@@ -119,11 +119,46 @@
    #error IKE_CREATE_CHILD_SA_SUPPORT parameter is not valid
 #endif
 
+//Child SA perfect forward secrecy support
+#ifndef IKE_CHILD_SA_PFS_SUPPORT
+   #define IKE_CHILD_SA_PFS_SUPPORT DISABLED
+#elif (IKE_CHILD_SA_PFS_SUPPORT != ENABLED && IKE_CHILD_SA_PFS_SUPPORT != DISABLED)
+   #error IKE_CHILD_SA_PFS_SUPPORT parameter is not valid
+#endif
+
+//Reauthentication support
+#if (IKE_CREATE_CHILD_SA_SUPPORT == DISABLED)
+   #define IKE_REAUTH_SUPPORT ENABLED
+#else
+   #define IKE_REAUTH_SUPPORT DISABLED
+#endif
+
 //Dead peer detection support
 #ifndef IKE_DPD_SUPPORT
    #define IKE_DPD_SUPPORT ENABLED
 #elif (IKE_DPD_SUPPORT != ENABLED && IKE_DPD_SUPPORT != DISABLED)
    #error IKE_DPD_SUPPORT parameter is not valid
+#endif
+
+//NAT traversal support
+#ifndef IKE_NAT_TRAVERSAL_SUPPORT
+   #define IKE_NAT_TRAVERSAL_SUPPORT DISABLED
+#elif (IKE_NAT_TRAVERSAL_SUPPORT != ENABLED && IKE_NAT_TRAVERSAL_SUPPORT != DISABLED)
+   #error IKE_NAT_TRAVERSAL_SUPPORT parameter is not valid
+#endif
+
+//Default NAT keepalive interval 
+#ifndef IKE_DEFAULT_NAT_KEEPALIVE_INTERVAL
+   #define IKE_DEFAULT_NAT_KEEPALIVE_INTERVAL 20000
+#elif (IKE_DEFAULT_NAT_KEEPALIVE_INTERVAL < 0)
+   #error IKE_DEFAULT_NAT_KEEPALIVE_INTERVAL parameter is not valid
+#endif
+
+//Include a specific traffic selector based on the triggering packet
+#ifndef IKE_SPECIFIC_TS_SUPPORT
+   #define IKE_SPECIFIC_TS_SUPPORT ENABLED
+#elif (IKE_SPECIFIC_TS_SUPPORT != ENABLED && IKE_SPECIFIC_TS_SUPPORT != DISABLED)
+   #error IKE_SPECIFIC_TS_SUPPORT parameter is not valid
 #endif
 
 //Maximum number of retransmissions of IKE requests
@@ -462,25 +497,18 @@
    #error IKE_SHA512_SUPPORT parameter is not valid
 #endif
 
-//SHA3-256 hash support (experimental)
-#ifndef IKE_SHA3_256_SUPPORT
-   #define IKE_SHA3_256_SUPPORT DISABLED
-#elif (IKE_SHA3_256_SUPPORT != ENABLED && IKE_SHA3_256_SUPPORT != DISABLED)
-   #error IKE_SHA3_256_SUPPORT parameter is not valid
+//SHAKE128/256 hash support (experimental)
+#ifndef IKE_SHAKE128_SUPPORT
+   #define IKE_SHAKE128_SUPPORT DISABLED
+#elif (IKE_SHAKE128_SUPPORT != ENABLED && IKE_SHAKE128_SUPPORT != DISABLED)
+   #error IKE_SHAKE128_SUPPORT parameter is not valid
 #endif
 
-//SHA3-384 hash support (experimental)
-#ifndef IKE_SHA3_384_SUPPORT
-   #define IKE_SHA3_384_SUPPORT DISABLED
-#elif (IKE_SHA3_384_SUPPORT != ENABLED && IKE_SHA3_384_SUPPORT != DISABLED)
-   #error IKE_SHA3_384_SUPPORT parameter is not valid
-#endif
-
-//SHA3-512 hash support (experimental)
-#ifndef IKE_SHA3_512_SUPPORT
-   #define IKE_SHA3_512_SUPPORT DISABLED
-#elif (IKE_SHA3_512_SUPPORT != ENABLED && IKE_SHA3_512_SUPPORT != DISABLED)
-   #error IKE_SHA3_512_SUPPORT parameter is not valid
+//SHAKE256/512 hash support (experimental)
+#ifndef IKE_SHAKE256_SUPPORT
+   #define IKE_SHAKE256_SUPPORT DISABLED
+#elif (IKE_SHAKE256_SUPPORT != ENABLED && IKE_SHAKE256_SUPPORT != DISABLED)
+   #error IKE_SHAKE256_SUPPORT parameter is not valid
 #endif
 
 //SM3 hash support (experimental)
@@ -682,7 +710,7 @@
 //Minimum acceptable size for RSA modulus
 #ifndef IKE_MIN_RSA_MODULUS_SIZE
    #define IKE_MIN_RSA_MODULUS_SIZE 1024
-#elif (IKE_MIN_RSA_MODULUS_SIZE < 512)
+#elif (IKE_MIN_RSA_MODULUS_SIZE < 1024)
    #error IKE_MIN_RSA_MODULUS_SIZE parameter is not valid
 #endif
 
@@ -696,7 +724,7 @@
 //Minimum acceptable size for DSA prime modulus
 #ifndef IKE_MIN_DSA_MODULUS_SIZE
    #define IKE_MIN_DSA_MODULUS_SIZE 1024
-#elif (IKE_MIN_DSA_MODULUS_SIZE < 512)
+#elif (IKE_MIN_DSA_MODULUS_SIZE < 1024)
    #error IKE_MIN_DSA_MODULUS_SIZE parameter is not valid
 #endif
 
@@ -783,12 +811,20 @@
 
 //UDP port number used by IKE
 #define IKE_PORT 500
-//UDP port number used by UDP-encapsulated IKE
-#define IKE_ALT_PORT 4500
 
-//Size of IKE SPI
+//IKE prefix size
+#define IKE_PREFIX_SIZE 4
+//IKE prefix value
+#define IKE_PREFIX_VALUE 0
+
+//NAT-keepalive packet size
+#define IKE_NAT_KEEPALIVE_PACKET_SIZE 1
+//NAT-keepalive packet value
+#define IKE_NAT_KEEPALIVE_PACKET_VALUE 0xFF
+
+//IKE SPI size
 #define IKE_SPI_SIZE 8
-//Size of SHA-1 digest
+//SHA-1 digest size
 #define IKE_SHA1_DIGEST_SIZE 20
 
 //Forward declaration of IkeContext structure
@@ -1758,7 +1794,7 @@ typedef error_t (*IkeCookieVerifyCallback)(IkeContext *context,
 
 
 /**
- * @brief Traffic selector parameters
+ * @brief Traffic selector entry
  **/
 
 typedef struct
@@ -1768,7 +1804,23 @@ typedef struct
    uint8_t ipProtocolId;
    uint16_t startPort;
    uint16_t endPort;
-} IkeTsParams;
+} IkeTsEntry;
+
+
+/**
+ * @brief Key exchange context
+ **/
+
+typedef struct
+{
+   uint16_t groupNum;       ///<Key exchange method
+#if (IKE_DH_KE_SUPPORT == ENABLED)
+   DhContext dhContext;     ///<Diffie-Hellman context
+#endif
+#if (IKE_ECDH_KE_SUPPORT == ENABLED)
+   EcdhContext ecdhContext; ///<ECDH context
+#endif
+} IkeKeContext;
 
 
 /**
@@ -1779,17 +1831,24 @@ struct _IkeSaEntry
 {
    IkeSaState state;                    ///<IKE SA state
    IkeContext *context;                 ///<IKE context
+   IkeChildSaEntry *childSa1;           ///<Child SA (created by the host)
+   IkeChildSaEntry *childSa2;           ///<Child SA (created by the peer)
+#if (IKE_CREATE_CHILD_SA_SUPPORT == ENABLED)
+   IkeSaEntry *newSa1;                  ///<New IKE SA (created by the host)
+   IkeSaEntry *newSa2;                  ///<New IKE SA (created by the peer)
+#endif
+#if (IKE_REAUTH_SUPPORT == ENABLED)
    IkeSaEntry *oldSa;                   ///<Old IKE SA
-   IkeSaEntry *newSa;                   ///<New IKE SA
-   IkeChildSaEntry *childSa;            ///<Child SA
-   IpAddr remoteIpAddr;                 ///<IP address of the peer
-   uint16_t remotePort;
+#endif
+   IpAddr remoteIpAddr;                 ///<Remote IP address
    bool_t originalInitiator;            ///<Original initiator of the IKE SA
    systime_t lifetimeStart;
    systime_t lifetime;                  ///<Lifetime of the IKE SA
+#if (IKE_REAUTH_SUPPORT == ENABLED)
    systime_t reauthPeriod;              ///<Reauthentication period
+#endif
 #if (IKE_DPD_SUPPORT == ENABLED)
-   systime_t dpdStart;
+   systime_t dpdTimestamp;              ///<Timestamp to manage dead peer detection
    systime_t dpdPeriod;                 ///<Dead peer detection period
 #endif
    systime_t timestamp;
@@ -1820,11 +1879,13 @@ struct _IkeSaEntry
    uint16_t encAlgoId;                  ///<Encryption algorithm
    uint16_t prfAlgoId;                  ///<Pseudorandom function
    uint16_t authAlgoId;                 ///<Integrity algorithm
-   uint16_t groupNum;                   ///<Key exchange method
    uint8_t acceptedProposalNum;         ///<Number of the accepted proposal
 
+   uint16_t preferredGroupNum;          ///<Preferred key exchange method
+   IkeKeContext keContext;              ///<Key exchange context
    uint8_t sharedSecret[IKE_MAX_SHARED_SECRET_LEN]; ///<Shared secret
    size_t sharedSecretLen;              ///<Length of the shared secret, in bytes
+
    uint8_t keyMaterial[IKE_MAX_SA_KEY_MAT_LEN]; ///<Keying material
    const uint8_t *skd;                  ///<Key used for deriving new keys for Child SAs
    const uint8_t *skai;                 ///<Integrity protection key (initiator)
@@ -1837,8 +1898,10 @@ struct _IkeSaEntry
    CipherMode cipherMode;               ///<Cipher mode of operation
    const CipherAlgo *cipherAlgo;        ///<Cipher algorithm
    CipherContext cipherContext;         ///<Cipher context
+   MacAlgo authMacAlgo;                 ///<MAC algorithm for integrity calculations
    const HashAlgo *authHashAlgo;        ///<Hash algorithm for HMAC-based integrity calculations
    const CipherAlgo *authCipherAlgo;    ///<Cipher algorithm for CMAC-based integrity calculations
+   MacAlgo prfMacAlgo;                  ///<MAC algorithm for PRF calculations
    const HashAlgo *prfHashAlgo;         ///<Hash algorithm for HMAC-based PRF calculations
    const CipherAlgo *prfCipherAlgo;     ///<Cipher algorithm for CMAC-based PRF calculations
    size_t encKeyLen;                    ///<Size of the encryption key, in bytes
@@ -1849,16 +1912,9 @@ struct _IkeSaEntry
    size_t icvLen;                       ///<Length of the ICV tag, in bytes
    uint8_t iv[8];                       ///<Initialization vector
 
-#if (IKE_DH_KE_SUPPORT == ENABLED)
-   DhContext dhContext;                 ///<Diffie-Hellman context
-#endif
-#if (IKE_ECDH_KE_SUPPORT == ENABLED)
-   EcdhContext ecdhContext;             ///<ECDH context
-#endif
-
-   uint8_t *initiatorSaInit;            ///<Pointer to the IKE_SA_INIT request
+   const uint8_t *initiatorSaInit;      ///<Pointer to the IKE_SA_INIT request
    size_t initiatorSaInitLen;           ///<Length of the IKE_SA_INIT request, in bytes
-   uint8_t *responderSaInit;            ///<Pointer to the IKE_SA_INIT response
+   const uint8_t *responderSaInit;      ///<Pointer to the IKE_SA_INIT response
    size_t responderSaInitLen;           ///<Length of the IKE_SA_INIT response, in bytes
 
    uint8_t request[IKE_MAX_MSG_SIZE];   ///<Request message
@@ -1866,17 +1922,28 @@ struct _IkeSaEntry
    uint8_t response[IKE_MAX_MSG_SIZE];  ///<Response message
    size_t responseLen;                  ///<Length of the response message, in bytes
 
+#if (IKE_CREATE_CHILD_SA_SUPPORT == ENABLED)
    bool_t rekeyRequest;                 ///<IKE SA rekey request
+#endif
+#if (IKE_REAUTH_SUPPORT == ENABLED)
    bool_t reauthRequest;                ///<IKE SA reauthentication request
    bool_t reauthPending;                ///<Reauthentication process is on-going
+#endif
    bool_t deleteRequest;                ///<IKE SA delete request
    bool_t deleteReceived;
-   bool_t nonAdditionalSas;             ///<NO_ADDITIONAL_SAS notification received
+   bool_t noAdditionalSas;              ///<NO_ADDITIONAL_SAS notification received
 #if (IKE_INITIAL_CONTACT_SUPPORT == ENABLED)
    bool_t initialContact;               ///<INITIAL_CONTACT notification received
 #endif
 #if (IKE_SIGN_HASH_ALGOS_SUPPORT == ENABLED)
    uint32_t signHashAlgos;              ///<List of hash algorithms supported by the peer
+#endif
+#if (IKE_NAT_TRAVERSAL_SUPPORT == ENABLED)
+   bool_t natDetectSrcIp;               ///<NAT_DETECTION_SOURCE_IP notification received
+   bool_t natDetectDestIp;              ///<NAT_DETECTION_DESTINATION_IP notification received
+   bool_t localNat;                     ///<The local host is behind a NAT
+   bool_t remoteNat;                    ///<The remote host is behind a NAT
+   systime_t natKeepAliveTimestamp;     ///<Timestamp to manage NAT keepalive transmission
 #endif
 };
 
@@ -1910,6 +1977,13 @@ struct _IkeChildSaEntry
    uint16_t esn;                       ///<Extended sequence numbers
    uint8_t acceptedProposalNum;        ///<Number of the accepted proposal
 
+#if (IKE_CHILD_SA_PFS_SUPPORT == ENABLED)
+   bool_t pfs;                         ///<Perfect forward secrecy
+   IkeKeContext keContext;             ///<Key exchange context
+   uint8_t sharedSecret[IKE_MAX_SHARED_SECRET_LEN]; ///<Shared secret
+   size_t sharedSecretLen;             ///<Length of the shared secret, in bytes
+#endif
+
    uint8_t keyMaterial[IKE_MAX_CHILD_SA_KEY_MAT_LEN]; ///<Keying material
    const uint8_t *skai;                ///<Integrity protection key (initiator)
    const uint8_t *skar;                ///<Integrity protection key (responder)
@@ -1918,6 +1992,7 @@ struct _IkeChildSaEntry
 
    CipherMode cipherMode;              ///<Cipher mode of operation
    const CipherAlgo *cipherAlgo;       ///<Cipher algorithm
+   MacAlgo authMacAlgo;                ///<MAC algorithm for integrity calculations
    const HashAlgo *authHashAlgo;       ///<Hash algorithm for HMAC-based integrity calculations
    const CipherAlgo *authCipherAlgo;   ///<Cipher algorithm for CMAC-based integrity calculations
    size_t encKeyLen;                   ///<Length of the encryption key, in bytes
@@ -1927,10 +2002,12 @@ struct _IkeChildSaEntry
    size_t icvLen;                      ///<Length of the ICV tag, in bytes
    uint8_t iv[8];                      ///<Initialization vector
 
-   IpsecPacketInfo packetInfo;
-   IpsecSelector selector;
+   IpsecPacketInfo packetInfo;         ///<Triggering packet
+   IpsecSelector selector;             ///<Selector parameters
 
+#if (IKE_CREATE_CHILD_SA_SUPPORT == ENABLED)
    bool_t rekeyRequest;                ///<Child SA rekey request
+#endif
    bool_t deleteRequest;               ///<Child SA delete request
    bool_t deleteReceived;
 
@@ -1956,9 +2033,14 @@ typedef struct
    uint_t numChildSaEntries;                         ///<Number of Child SA entries
    systime_t saLifetime;                             ///<Lifetime of IKE SAs
    systime_t childSaLifetime;                        ///<Lifetime of Child SAs
+#if (IKE_REAUTH_SUPPORT == ENABLED)
    systime_t reauthPeriod;                           ///<Reauthentication period
+#endif
 #if (IKE_DPD_SUPPORT == ENABLED)
    systime_t dpdPeriod;                              ///<Dead peer detection period
+#endif
+#if (IKE_NAT_TRAVERSAL_SUPPORT == ENABLED)
+   systime_t natKeepaliveInterval;                   ///<NAT keepalive interval
 #endif
 #if (IKE_COOKIE_SUPPORT == ENABLED)
    IkeCookieGenerateCallback cookieGenerateCallback; ///<Cookie generation callback function
@@ -1987,7 +2069,9 @@ struct _IkeContext
    void *prngContext;                         ///<Pseudo-random number generator context
    systime_t saLifetime;                      ///<Lifetime of IKE SAs
    systime_t childSaLifetime;                 ///<Lifetime of Child SAs
+#if (IKE_REAUTH_SUPPORT == ENABLED)
    systime_t reauthPeriod;                    ///<Reauthentication period
+#endif
 #if (IKE_DPD_SUPPORT == ENABLED)
    systime_t dpdPeriod;                       ///<Dead peer detection period
 #endif
@@ -2004,8 +2088,14 @@ struct _IkeContext
    size_t privateKeyLen;                      ///<Length of the private key
    char_t password[IKE_MAX_PASSWORD_LEN + 1]; ///<Password used to decrypt the private key
 
-   Socket *socket;                            ///<Underlying UDP socket
+   Socket *socket;                            ///<Underlying UDP socket (port 500)
+#if (IKE_NAT_TRAVERSAL_SUPPORT == ENABLED)
+   Socket *altSocket;                         ///<Underlying UDP socket (port 4500)
+   systime_t natKeepaliveInterval;            ///<NAT keepalive interval
+#endif
+   NetInterface *localInterface;              ///<Network interface the IKE message was received on
    IpAddr localIpAddr;                        ///<Destination IP address of the received IKE message
+   uint16_t localPort;                        ///<Destination port of the received IKE message
    IpAddr remoteIpAddr;                       ///<Source IP address of the received IKE message
    uint16_t remotePort;                       ///<Source port of the received IKE message
    IkeSaEntry *sa;                            ///<IKE SA entries
@@ -2015,15 +2105,7 @@ struct _IkeContext
    uint8_t message[IKE_MAX_MSG_SIZE];         ///<Incoming IKE message
    size_t messageLen;                         ///<Length of the incoming IKE message, in bytes
 
-#if (IKE_CMAC_AUTH_SUPPORT == ENABLED || IKE_CMAC_PRF_SUPPORT == ENABLED)
-   CmacContext cmacContext;                   ///<CMAC context
-#endif
-#if (IKE_HMAC_AUTH_SUPPORT == ENABLED || IKE_HMAC_PRF_SUPPORT == ENABLED)
-   HmacContext hmacContext;                   ///<HMAC context
-#endif
-#if (IKE_XCBC_MAC_AUTH_SUPPORT == ENABLED || IKE_XCBC_MAC_PRF_SUPPORT == ENABLED)
-   XcbcMacContext xcbcMacContext;             ///<XCBC-MAC context
-#endif
+   MacContext macContext;                     ///<MAC context
 
 #if (IKE_COOKIE_SUPPORT == ENABLED)
    IkeCookieGenerateCallback cookieGenerateCallback; ///<Cookie generation callback function
@@ -2053,7 +2135,7 @@ error_t ikeSetCertificate(IkeContext *context, const char_t *certChain,
    size_t certChainLen, const char_t *privateKey, size_t privateKeyLen,
    const char_t *password);
 
-error_t ikeCreateSa(IkeContext *context, const IpsecPacketInfo *packet);
+error_t ikeCreateSa(IkeContext *context, const IpAddr *remoteIpAddr);
 error_t ikeRekeySa(IkeSaEntry *sa);
 error_t ikeDeleteSa(IkeSaEntry *sa);
 

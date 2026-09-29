@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 //Switch to the appropriate trace level
@@ -37,7 +37,7 @@
 #include "ike/ike_fsm.h"
 #include "ike/ike_algorithms.h"
 #include "ike/ike_certificate.h"
-#include "ike/ike_message_parse.h"
+#include "ike/ike_message_dispatch.h"
 #include "ike/ike_misc.h"
 #include "ike/ike_debug.h"
 #include "pkix/pem_import.h"
@@ -81,19 +81,29 @@ void ikeGetDefaultSettings(IkeSettings *settings)
    settings->saLifetime = IKE_DEFAULT_SA_LIFETIME;
    //Lifetime of Child SAs
    settings->childSaLifetime = IKE_DEFAULT_CHILD_SA_LIFETIME;
+
+#if (IKE_REAUTH_SUPPORT == ENABLED)
    //Reauthentication period
    settings->reauthPeriod = 0;
+#endif
 
 #if (IKE_DPD_SUPPORT == ENABLED)
    //Dead peer detection period
    settings->dpdPeriod = 0;
 #endif
+
+#if (IKE_NAT_TRAVERSAL_SUPPORT == ENABLED)
+   //NAT keepalive interval 
+   settings->natKeepaliveInterval = IKE_DEFAULT_NAT_KEEPALIVE_INTERVAL;
+#endif
+
 #if (IKE_COOKIE_SUPPORT == ENABLED)
    //Cookie generation callback function
    settings->cookieGenerateCallback = NULL;
    //Cookie verification callback function
    settings->cookieVerifyCallback = NULL;
 #endif
+
 #if (IKE_CERT_AUTH_SUPPORT == ENABLED)
    //Certificate verification callback function
    settings->certVerifyCallback = NULL;
@@ -168,19 +178,29 @@ error_t ikeInit(IkeContext *context, const IkeSettings *settings)
    context->saLifetime = settings->saLifetime;
    //Lifetime of Child SAs
    context->childSaLifetime = settings->childSaLifetime;
+
+#if (IKE_REAUTH_SUPPORT == ENABLED)
    //Reauthentication period
    context->reauthPeriod = settings->reauthPeriod;
+#endif
 
 #if (IKE_DPD_SUPPORT == ENABLED)
    //Dead peer detection period
    context->dpdPeriod = settings->dpdPeriod;
 #endif
+
+#if (IKE_NAT_TRAVERSAL_SUPPORT == ENABLED)
+   //NAT keepalive interval 
+   context->natKeepaliveInterval = settings->natKeepaliveInterval;
+#endif
+
 #if (IKE_COOKIE_SUPPORT == ENABLED)
    //Cookie generation callback function
    context->cookieGenerateCallback = settings->cookieGenerateCallback;
    //Cookie verification callback function
    context->cookieVerifyCallback = settings->cookieVerifyCallback;
 #endif
+
 #if (IKE_CERT_AUTH_SUPPORT == ENABLED)
    //Certificate verification callback function
    context->certVerifyCallback = settings->certVerifyCallback;
@@ -266,6 +286,32 @@ error_t ikeStart(IkeContext *context)
       if(error)
          break;
 
+#if (IKE_NAT_TRAVERSAL_SUPPORT == ENABLED)
+      //Open an alternate UDP socket
+      context->altSocket = socketOpenEx(context->netContext, SOCKET_TYPE_DGRAM,
+         SOCKET_IP_PROTO_UDP);
+      //Failed to open socket?
+      if(context->altSocket == NULL)
+      {
+         //Report an error
+         error = ERROR_OPEN_FAILED;
+         break;
+      }
+
+      //Associate the socket with the relevant interface
+      error = socketBindToInterface(context->altSocket, context->interface);
+      //Unable to bind the socket to the desired interface?
+      if(error)
+         break;
+
+      //Port 4500 is reserved for UDP-encapsulated ESP and IKE (refer to
+      //RFC 7296, section 2.23);
+      error = socketBind(context->altSocket, &IP_ADDR_ANY, IPSEC_NAT_PORT);
+      //Unable to bind the socket to the desired port?
+      if(error)
+         break;
+#endif
+
       //Start the IKE service
       context->stop = FALSE;
       context->running = TRUE;
@@ -291,9 +337,21 @@ error_t ikeStart(IkeContext *context)
       //Clean up side effects
       context->running = FALSE;
 
-      //Close the UDP socket
-      socketClose(context->socket);
-      context->socket = NULL;
+      //Close UDP socket
+      if(context->socket != NULL)
+      {
+         socketClose(context->socket);
+         context->socket = NULL;
+      }
+
+#if (IKE_NAT_TRAVERSAL_SUPPORT == ENABLED)
+      //Close alternate UDP socket
+      if(context->altSocket != NULL)
+      {
+         socketClose(context->altSocket);
+         context->altSocket = NULL;
+      }
+#endif
    }
 
    //Return status code
@@ -333,8 +391,20 @@ error_t ikeStop(IkeContext *context)
 #endif
 
       //Close the UDP socket
-      socketClose(context->socket);
-      context->socket = NULL;
+      if(context->socket != NULL)
+      {
+         socketClose(context->socket);
+         context->socket = NULL;
+      }
+
+#if (IKE_NAT_TRAVERSAL_SUPPORT == ENABLED)
+      //Close alternate UDP socket
+      if(context->altSocket != NULL)
+      {
+         socketClose(context->altSocket);
+         context->altSocket = NULL;
+      }
+#endif
    }
 
    //Successful processing
@@ -560,6 +630,109 @@ error_t ikeSetCertificate(IkeContext *context, const char_t *certChain,
 
 
 /**
+ * @brief Create a new IKE SA
+ * @param[in] context Pointer to the IKE context
+ * @param[in] remoteIpAddr IP address of the peer
+ * @return Error code
+ **/
+
+error_t ikeCreateSa(IkeContext *context, const IpAddr *remoteIpAddr)
+{
+   uint_t i;
+   IkeSaEntry *sa;
+
+   //Check parameters
+   if(context == NULL || remoteIpAddr == NULL)
+      return ERROR_INVALID_PARAMETER;
+
+   //Debug message
+   TRACE_INFO("Creating IKE SA...\r\n");
+
+   //Loop through IKE SA entries
+   for(i = 0; i < context->numSaEntries; i++)
+   {
+      //Point to the current IKE SA
+      sa = &context->sa[i];
+
+      //Check whether the current IKE SA matches the peer's IP address
+      if(sa->state != IKE_SA_STATE_CLOSED &&
+         ipCompAddr(&sa->remoteIpAddr, remoteIpAddr))
+      {
+         break;
+      }
+   }
+
+   //A new IKE SA should only be created if there is no existing entry
+   if(i >= context->numSaEntries)
+   {
+      //Create a new IKE SA
+      sa = ikeCreateSaEntry(context);
+      //Failed to create IKE SA?
+      if(sa == NULL)
+         return ERROR_OUT_OF_RESOURCES;
+
+      //Initialize IKE SA
+      sa->remoteIpAddr = *remoteIpAddr;
+
+      //The original initiator always refers to the party who initiated the
+      //exchange (refer to RFC 7296, section 2.2)
+      sa->originalInitiator = TRUE;
+
+      //Select the preferred key exchange method
+      sa->keContext.groupNum = context->preferredGroupNum;
+
+      //Request the creation of the IKE SA
+      ikeChangeSaState(sa, IKE_SA_STATE_INIT_REQ);
+      //Notify the IKE context that the IKE SA should be created
+      osSetEvent(&context->event);
+   }
+
+   //Successful processing
+   return NO_ERROR;
+}
+
+
+/**
+ * @brief Rekey an IKE SA
+ * @param[in] sa Pointer to the IKE SA to rekey
+ * @return Error code
+ **/
+
+error_t ikeRekeySa(IkeSaEntry *sa)
+{
+#if (IKE_CREATE_CHILD_SA_SUPPORT == ENABLED)
+   IkeContext *context;
+
+   //Make sure the IKE SA is valid
+   if(sa == NULL)
+      return ERROR_INVALID_PARAMETER;
+
+   //Debug message
+   TRACE_INFO("Rekeying IKE SA...\r\n");
+
+   //Check the state of the IKE SA
+   if(sa->state != IKE_SA_STATE_CLOSED)
+   {
+      //Point to the IKE context
+      context = sa->context;
+
+      //Request rekeying of the IKE SA
+      sa->rekeyRequest = TRUE;
+      //Notify the IKE context that the IKE SA should be rekeyed
+      osSetEvent(&context->event);
+   }
+
+   //Successful processing
+   return NO_ERROR;
+#else
+   //Minimal implementations are not required to support the CREATE_CHILD_SA
+   //exchange (refer to RFC 7296, section 4)
+   return ERROR_NOT_IMPLEMENTED;
+#endif
+}
+
+
+/**
  * @brief Delete an IKE SA
  * @param[in] sa Pointer to the IKE SA to delete
  * @return Error code
@@ -646,7 +819,7 @@ error_t ikeCreateChildSa(IkeContext *context, const IpsecPacketInfo *packet)
 
    //Search the SPD for a matching entry
    spdEntry = ipsecFindSpdEntry(ipsecContext, IPSEC_POLICY_ACTION_PROTECT,
-      &selector);
+      &selector, TRUE);
 
    //Every SPD should have a nominal, final entry that matches anything that is
    //otherwise unmatched, and discards it (refer to RFC 4301, section 4.4.1)
@@ -681,6 +854,9 @@ error_t ikeCreateChildSa(IkeContext *context, const IpsecPacketInfo *packet)
    childSa->remoteIpAddr = remoteIpAddr;
    childSa->mode = spdEntry->mode;
    childSa->protocol = spdEntry->protocol;
+#if (IKE_CHILD_SA_PFS_SUPPORT == ENABLED)
+   childSa->pfs = spdEntry->pfs;
+#endif
    childSa->initiator = TRUE;
    childSa->packetInfo = *packet;
    childSa->selector = selector;
@@ -699,6 +875,44 @@ error_t ikeCreateChildSa(IkeContext *context, const IpsecPacketInfo *packet)
 }
 
 
+/**
+ * @brief Rekey a Child SA
+ * @param[in] childSa Pointer to the Child SA to rekey
+ * @return Error code
+ **/
+
+error_t ikeRekeyChildSa(IkeChildSaEntry *childSa)
+{
+#if (IKE_CREATE_CHILD_SA_SUPPORT == ENABLED)
+   IkeContext *context;
+
+   //Make sure the Child SA is valid
+   if(childSa == NULL)
+      return ERROR_INVALID_PARAMETER;
+
+   //Debug message
+   TRACE_INFO("Rekeying Child SA...\r\n");
+
+   //Check the state of the Child SA
+   if(childSa->state != IKE_CHILD_SA_STATE_CLOSED)
+   {
+      //Point to the IKE context
+      context = childSa->context;
+
+      //Request rekeying of the Child SA
+      childSa->rekeyRequest = TRUE;
+      //Notify the IKE context that the Child SA should be rekeyed
+      osSetEvent(&context->event);
+   }
+
+   //Successful processing
+   return NO_ERROR;
+#else
+   //Minimal implementations are not required to support the CREATE_CHILD_SA
+   //exchange (refer to RFC 7296, section 4)
+   return ERROR_NOT_IMPLEMENTED;
+#endif
+}
 
 
 /**
@@ -743,7 +957,10 @@ error_t ikeDeleteChildSa(IkeChildSaEntry *childSa)
 void ikeTask(IkeContext *context)
 {
    error_t error;
-   SocketEventDesc eventDesc;
+   uint_t n;
+   Socket *socket;
+   SocketMsg msg;
+   SocketEventDesc eventDesc[2];
 
 #if (NET_RTOS_SUPPORT == ENABLED)
    //Task prologue
@@ -753,13 +970,24 @@ void ikeTask(IkeContext *context)
    while(1)
    {
 #endif
-      //Specify the events the application is interested in
-      eventDesc.socket = context->socket;
-      eventDesc.eventMask = SOCKET_EVENT_RX_READY;
-      eventDesc.eventFlags = 0;
+      //Number of entries in the descriptor set
+      n = 0;
+
+      //IKE normally listens on UDP port 500
+      eventDesc[n].socket = context->socket;
+      eventDesc[n].eventMask = SOCKET_EVENT_RX_READY;
+      eventDesc[n++].eventFlags = 0;
+
+#if (IKE_NAT_TRAVERSAL_SUPPORT == ENABLED)
+      //IKE messages may also be received on UDP port 4500 with a slightly
+      //different format (refer to RFC 7296, section 2)
+      eventDesc[n].socket = context->altSocket;
+      eventDesc[n].eventMask = SOCKET_EVENT_RX_READY;
+      eventDesc[n++].eventFlags = 0;
+#endif
 
       //Wait for an event
-      socketPoll(&eventDesc, 1, &context->event, IKE_TICK_INTERVAL);
+      socketPoll(eventDesc, n, &context->event, IKE_TICK_INTERVAL);
 
       //Stop request?
       if(context->stop)
@@ -772,20 +1000,59 @@ void ikeTask(IkeContext *context)
          osDeleteTask(OS_SELF_TASK_ID);
       }
 
-      //Any datagram received?
-      if(eventDesc.eventFlags != 0)
+#if (IKE_NAT_TRAVERSAL_SUPPORT == ENABLED)
+      //IKE runs over UDP ports 500 and 4500
+      if(n > 0 && eventDesc[0].eventFlags != 0)
       {
-         //An implementation must accept incoming requests even if the source
-         //port is not 500 or 4500 (refer to RFC 7296, section 2.11)
-         error = socketReceiveEx(context->socket, &context->remoteIpAddr,
-            &context->remotePort, &context->localIpAddr, context->message,
-            IKE_MAX_MSG_SIZE, &context->messageLen, 0);
+         socket = context->socket;
+      }
+      else if(n > 1 && eventDesc[1].eventFlags != 0)
+      {
+         socket = context->altSocket;
+      }
+      else
+      {
+         socket = NULL;
+      }
+#else
+      //IKE runs over UDP port 500
+      if(n > 0 && eventDesc[0].eventFlags != 0)
+      {
+         socket = context->socket;
+      }
+      else
+      {
+         socket = NULL;
+      }
+#endif
+
+      //Any datagram received?
+      if(socket != NULL)
+      {
+         //Point to the receive buffer
+         msg = SOCKET_DEFAULT_MSG;
+         msg.data = context->message;
+         msg.size = IKE_MAX_MSG_SIZE;
+
+         //Receive incoming datagram
+         error = socketReceiveMsg(socket, &msg, 0);
 
          //Check status code
          if(!error)
          {
+            //Retrieve the length of the datagram
+            context->messageLen = msg.length;
+
+            //An implementation must accept incoming requests even if the source
+            //port is not 500 or 4500 (refer to RFC 7296, section 2.11)
+            context->localInterface = msg.interface;
+            context->localIpAddr = msg.destIpAddr;
+            context->localPort = msg.destPort;
+            context->remoteIpAddr = msg.srcIpAddr;
+            context->remotePort = msg.srcPort;
+
             //Process the received IKE message
-            ikeProcessMessage(context, context->message, context->messageLen);
+            ikeDispatchMessage(context, context->message, context->messageLen);
          }
       }
 

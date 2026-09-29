@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 //Dependencies
@@ -34,7 +34,7 @@
 #include "ipsec/ipsec_misc.h"
 #include "ike/ike.h"
 #include "ah/ah.h"
-#include "esp/esp_packet_encrypt.h"
+#include "esp/esp.h"
 #include "debug.h"
 
 //Check IPsec library configuration
@@ -75,7 +75,7 @@ error_t ipsecProcessOutboundIpv4Packet(NetInterface *interface,
    {
       //Search the SPD for a matching entry
       spdEntry = ipsecFindSpdEntry(context, IPSEC_POLICY_ACTION_INVALID,
-         &selector);
+         &selector, TRUE);
 
       //Any SPD entry found?
       if(spdEntry != NULL)
@@ -91,8 +91,8 @@ error_t ipsecProcessOutboundIpv4Packet(NetInterface *interface,
             if(sadEntry != NULL)
             {
                //Protect the outbound packet using AH or ESP
-               error = ipsecProtectIpv4Packet(context, sadEntry, interface,
-                  pseudoHeader, fragId, buffer, offset, ancillary);
+               error = ipsecProtectOutboundIpv4Packet(context, sadEntry,
+                  interface, pseudoHeader, fragId, buffer, offset, ancillary);
             }
             else
             {
@@ -117,8 +117,7 @@ error_t ipsecProcessOutboundIpv4Packet(NetInterface *interface,
          }
          else if(spdEntry->policyAction == IPSEC_POLICY_ACTION_BYPASS)
          {
-            //If the SPD entry calls for BYPASS, then the packet is not
-            //protected
+            //If the SPD entry calls for BYPASS, then the packet is not protected
             error = ipsecSendIpv4Packet(interface, pseudoHeader, fragId,
                buffer, offset, ancillary);
          }
@@ -258,87 +257,23 @@ error_t ipsecGetOutboundIpv4PacketSelector(const Ipv4PseudoHeader *pseudoHeader,
  * @return Error code
  **/
 
-error_t ipsecProtectIpv4Packet(IpsecContext *context, IpsecSadEntry *sa,
+error_t ipsecProtectOutboundIpv4Packet(IpsecContext *context, IpsecSadEntry *sa,
    NetInterface *interface, const Ipv4PseudoHeader *pseudoHeader,
-   uint16_t fragId, NetBuffer *buffer, size_t offset, NetTxAncillary *ancillary)
+   uint16_t fragId, NetBuffer *buffer, size_t offset,
+   NetTxAncillary *ancillary)
 {
    error_t error;
-   size_t length;
 
    //Check the state of the SAD entry
    if(sa->state == IPSEC_SA_STATE_OPEN)
    {
-      //Retrieve the length of the data
-      length = netBufferGetLength(buffer) - offset;
-
 #if (AH_SUPPORT == ENABLED)
       //AH protocol?
       if(sa->protocol == IPSEC_PROTOCOL_AH)
       {
-         AhHeader *ahHeader;
-         Ipv4Header ipv4Header;
-         Ipv4PseudoHeader pseudoHeader2;
-
-         //Sanity check
-         if(offset < (sizeof(AhHeader) + sa->icvLen))
-            return ERROR_FAILURE;
-
-         //Make room for the AH header
-         offset -= sizeof(AhHeader) + sa->icvLen;
-         length += sizeof(AhHeader) + sa->icvLen;
-
-         //The AH header is inserted after the IP header and before a next
-         //layer protocol
-         ahHeader = netBufferAt(buffer, offset, 0);
-
-         //The sender increments the sequence number counter for this SA and
-         //inserts the low-order 32 bits of the value into the Sequence
-         //Number field (refer to RFC 4302, section 3.3.2)
-         sa->seqNum++;
-
-         //Format AH header
-         ahHeader->nextHeader = pseudoHeader->protocol;
-         ahHeader->payloadLen = (sizeof(AhHeader) + sa->icvLen) / 4 - 2;
-         ahHeader->reserved = 0;
-         ahHeader->spi = htonl(sa->spi);
-         ahHeader->seqNum = htonl(sa->seqNum);
-
-         //The Integrity Check Value field is also set to zero in preparation
-         //for this computation (refer to RFC 4302, section 3.3.3.1)
-         osMemset(ahHeader->icv, 0, sa->icvLen);
-
-         //Format outer IPv4 header
-         osMemset(&ipv4Header, 0, sizeof(Ipv4Header));
-         ipv4Header.version = IPV4_VERSION;
-         ipv4Header.headerLength = 5;
-         ipv4Header.typeOfService = 0;
-         ipv4Header.totalLength = htons(length + sizeof(Ipv4Header));
-         ipv4Header.identification = htons(fragId);
-         ipv4Header.fragmentOffset = 0;
-         ipv4Header.timeToLive = 0;
-         ipv4Header.protocol = IPV4_PROTOCOL_AH;
-         ipv4Header.headerChecksum = 0;
-         ipv4Header.srcAddr = pseudoHeader->srcAddr;
-         ipv4Header.destAddr = pseudoHeader->destAddr;
-
-         //Compute ICV value
-         error = ahGenerateIcv(context, sa, &ipv4Header, ahHeader, buffer,
-            offset + sizeof(AhHeader) + sa->icvLen);
-         //Any error to report?
-         if(error)
-            return error;
-
-         //Fix the Next Layer Protocol value
-         pseudoHeader2 = *pseudoHeader;
-         pseudoHeader2.protocol = IPV4_PROTOCOL_AH;
-
-         //Debug message
-         TRACE_INFO("AH Header:\r\n");
-         ahDumpHeader(ahHeader);
-
-         //Send AH packet
-         error = ipsecSendIpv4Packet(interface, &pseudoHeader2, fragId, buffer,
-            offset, ancillary);
+         //Protect the IPv4 packet using AH
+         error = ahProtectOutboundIpv4Packet(context, sa, interface,
+            pseudoHeader, fragId, buffer, offset, ancillary);
       }
       else
 #endif
@@ -346,75 +281,9 @@ error_t ipsecProtectIpv4Packet(IpsecContext *context, IpsecSadEntry *sa,
       //ESP protocol?
       if(sa->protocol == IPSEC_PROTOCOL_ESP)
       {
-         size_t n;
-         size_t offset2;
-         NetBuffer *buffer2;
-         Ipv4PseudoHeader pseudoHeader2;
-         EspHeader *espHeader;
-
-         //The sender may add 0 to 255 bytes of padding
-         n = espComputePadLength(sa, length);
-         //Calculate the overhead caused by ESP encryption
-         n += sizeof(EspHeader) + sizeof(EspTrailer) + sa->ivLen + sa->icvLen;
-
-         //Check the length of the resulting ESP packet
-         if((length + n) > ESP_BUFFER_SIZE)
-            return ERROR_FAILURE;
-
-         //The ESP header is inserted after the IP header and before the
-         //next layer protocol header (transport mode) or before an
-         //encapsulated IP header (tunnel mode)
-         espHeader = (EspHeader *) context->buffer;
-
-         //The sender increments the sequence number counter for this SA and
-         //inserts the low-order 32 bits of the value into the Sequence
-         //Number field (refer to RFC 4303, section 3.3.3)
-         sa->seqNum++;
-
-         //Format ESP header
-         espHeader->spi = htonl(sa->spi);
-         espHeader->seqNum = htonl(sa->seqNum);
-
-         //Debug message
-         TRACE_INFO("ESP Header:\r\n");
-         espDumpHeader(espHeader);
-
-         //Copy the payload data to be encrypted
-         netBufferRead(espHeader->payloadData + sa->ivLen, buffer,
-            offset, length);
-
-         //The encryption algorithm employed to protect the ESP packet is
-         //specified by the SA via which the packet is transmitted
-         error = espEncryptPacket(context, sa, espHeader,
-            espHeader->payloadData, &length, pseudoHeader->protocol);
-         //Any error to report?
-         if(error)
-            return error;
-
-         //Calculate the length of the resulting ESP packet
-         length += sizeof(EspHeader);
-
-         //Allocate a buffer to hold the ESP packet
-         buffer2 = ipAllocBuffer(length, &offset2);
-         //Failed to allocate memory?
-         if(buffer2 == NULL)
-            return ERROR_OUT_OF_MEMORY;
-
-         //Copy the resulting ESP packet
-         netBufferWrite(buffer2, offset2, context->buffer, length);
-
-         //The outer IPv4 protocol header that immediately precedes the ESP
-         //header shall contain the value 50 in its Protocol field (refer to
-         //RFC 4303, section 2)
-         pseudoHeader2 = *pseudoHeader;
-         pseudoHeader2.protocol = IPV4_PROTOCOL_ESP;
-
-         //Send ESP packet
-         error = ipsecSendIpv4Packet(interface, &pseudoHeader2, fragId,
-            buffer2, offset2, ancillary);
-
-         //Free previously allocated memory
-         netBufferFree(buffer2);
+         //Protect the IPv4 packet using ESP
+         error = espProtectOutboundIpv4Packet(context, sa, interface,
+            pseudoHeader, fragId, buffer, offset, ancillary);
       }
       else
 #endif

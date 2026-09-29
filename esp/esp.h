@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 #ifndef _ESP_H
@@ -41,11 +41,25 @@
    #error ESP_SUPPORT parameter is not valid
 #endif
 
+//UDP encapsulation of IPsec ESP packets
+#ifndef ESP_UDP_ENCAPS_SUPPORT
+   #define ESP_UDP_ENCAPS_SUPPORT DISABLED
+#elif (ESP_UDP_ENCAPS_SUPPORT != ENABLED && ESP_UDP_ENCAPS_SUPPORT != DISABLED)
+   #error ESP_UDP_ENCAPS_SUPPORT parameter is not valid
+#endif
+
 //Extended Sequence Numbers support
 #ifndef ESP_ESN_SUPPORT
    #define ESP_ESN_SUPPORT ENABLED
 #elif (ESP_ESN_SUPPORT != ENABLED && ESP_ESN_SUPPORT != DISABLED)
    #error ESP_ESN_SUPPORT parameter is not valid
+#endif
+
+//NULL cipher support (insecure)
+#ifndef ESP_NULL_SUPPORT
+   #define ESP_NULL_SUPPORT DISABLED
+#elif (ESP_NULL_SUPPORT != ENABLED && ESP_NULL_SUPPORT != DISABLED)
+   #error ESP_NULL_SUPPORT parameter is not valid
 #endif
 
 //CBC cipher mode support
@@ -321,9 +335,16 @@ typedef __packed_struct
 #endif
 
 //ESP related functions
-error_t ipv4ProcessEspHeader(NetInterface *interface,
+error_t espProtectOutboundIpv4Packet(IpsecContext *context, IpsecSadEntry *sa,
+   NetInterface *interface, const Ipv4PseudoHeader *pseudoHeader,
+   uint16_t fragId, NetBuffer *buffer, size_t offset,
+   NetTxAncillary *ancillary);
+
+error_t espProcessInboundIpv4Packet(NetInterface *interface,
    const Ipv4Header *ipv4Header, const NetBuffer *buffer, size_t offset,
-   NetRxAncillary *ancillary);
+   NetRxAncillary *ancillary, bool_t udpEncapsulation);
+
+bool_t espIsUdpEncapsulatedPacket(const NetBuffer *buffer, size_t offset);
 
 void espDumpHeader(const EspHeader *espHeader);
 

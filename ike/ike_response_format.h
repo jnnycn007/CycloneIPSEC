@@ -1,6 +1,6 @@
 /**
- * @file ike_message_format.h
- * @brief IKE message formatting
+ * @file ike_response_format.h
+ * @brief IKE response formatting
  *
  * @section License
  *
@@ -25,11 +25,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
-#ifndef _IKE_MESSAGE_FORMAT_H
-#define _IKE_MESSAGE_FORMAT_H
+#ifndef _IKE_RESPONSE_FORMAT_H
+#define _IKE_RESPONSE_FORMAT_H
 
 //Dependencies
 #include "ike/ike.h"
@@ -40,30 +40,21 @@ extern "C" {
 #endif
 
 //IKE related functions
-error_t ikeSendIkeSaInitRequest(IkeSaEntry *sa);
+error_t ikeSendResponse(IkeContext *context, const uint8_t *message,
+   size_t length);
+
 error_t ikeSendIkeSaInitResponse(IkeSaEntry *sa);
-error_t ikeSendIkeAuthRequest(IkeSaEntry *sa);
 error_t ikeSendIkeAuthResponse(IkeSaEntry *sa);
-error_t ikeSendCreateChildSaRequest(IkeSaEntry *sa, IkeChildSaEntry *childSa);
-error_t ikeSendCreateChildSaResponse(IkeSaEntry *sa, IkeChildSaEntry *childSa);
-error_t ikeSendInfoRequest(IkeSaEntry *sa);
+error_t ikeSendCreateChildSaResponse(IkeSaEntry *sa);
 error_t ikeSendInfoResponse(IkeSaEntry *sa);
 
 error_t ikeSendErrorResponse(IkeContext *context, uint8_t *message,
    size_t length);
 
-error_t ikeFormatIkeSaInitRequest(IkeSaEntry *sa, uint8_t *p, size_t *length);
 error_t ikeFormatIkeSaInitResponse(IkeSaEntry *sa, uint8_t *p, size_t *length);
-error_t ikeFormatIkeAuthRequest(IkeSaEntry *sa, uint8_t *p, size_t *length);
 error_t ikeFormatIkeAuthResponse(IkeSaEntry *sa, uint8_t *p, size_t *length);
 
-error_t ikeFormatCreateChildSaRequest(IkeSaEntry *sa, IkeChildSaEntry *childSa,
-   uint8_t *p, size_t *length);
-
-error_t ikeFormatCreateChildSaResponse(IkeSaEntry *sa, IkeChildSaEntry *childSa,
-   uint8_t *p, size_t *length);
-
-error_t ikeFormatInfoRequest(IkeSaEntry *sa, uint8_t *p,
+error_t ikeFormatCreateChildSaResponse(IkeSaEntry *sa, uint8_t *p,
    size_t *length);
 
 error_t ikeFormatInfoResponse(IkeSaEntry *sa, uint8_t *p,
@@ -71,6 +62,12 @@ error_t ikeFormatInfoResponse(IkeSaEntry *sa, uint8_t *p,
 
 error_t ikeFormatErrorResponse(IkeHeader *requestHeader, uint8_t *p,
    size_t *length);
+
+error_t ikeFormatChildSaCreateResponse(IkeSaEntry *sa, uint8_t *p,
+   size_t *length, uint8_t **nextPayload);
+
+error_t ikeFormatIkeSaRekeyResponse(IkeSaEntry *sa, uint8_t *p, size_t *length,
+   uint8_t **nextPayload);
 
 //C++ guard
 #ifdef __cplusplus

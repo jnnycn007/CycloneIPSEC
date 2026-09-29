@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 //Switch to the appropriate trace level
@@ -36,7 +36,7 @@
 #include "ike/ike.h"
 #include "ike/ike_fsm.h"
 #include "ike/ike_key_exchange.h"
-#include "ike/ike_message_format.h"
+#include "ike/ike_request_format.h"
 #include "ike/ike_misc.h"
 #include "debug.h"
 
@@ -71,8 +71,10 @@ void ikeChangeSaState(IkeSaEntry *sa, IkeSaState newState)
       //be jittered (refer to RFC 7296, section 2.8.1)
       sa->lifetime = ikeRandomizeDelay(context, context->saLifetime);
 
+#if (IKE_REAUTH_SUPPORT == ENABLED)
       //Reauthentication period
       sa->reauthPeriod = ikeRandomizeDelay(context, context->reauthPeriod);
+#endif
    }
 
 #if (IKE_DPD_SUPPORT == ENABLED)
@@ -81,7 +83,7 @@ void ikeChangeSaState(IkeSaEntry *sa, IkeSaState newState)
       newState == IKE_SA_STATE_OPEN)
    {
       //Get current time
-      sa->dpdStart = osGetSystemTime();
+      sa->dpdTimestamp = osGetSystemTime();
       //Set dead peer detection period
       sa->dpdPeriod = ikeRandomizeDelay(context, context->dpdPeriod);
    }
@@ -160,7 +162,7 @@ void ikeProcessEvents(IkeContext *context)
       else if(sa->state == IKE_SA_STATE_AUTH_REQ)
       {
          //Delete half-open IKE SAs after timeout
-         if(timeCompare(time, sa->timestamp + IKE_HALF_OPEN_TIMEOUT) >= 0)
+         if((time - sa->timestamp) >= IKE_HALF_OPEN_TIMEOUT)
          {
             //Debug message
             TRACE_INFO("Deleting half-open IKE SA...\r\n");
@@ -184,7 +186,7 @@ void ikeProcessEvents(IkeContext *context)
          sa->state == IKE_SA_STATE_AUTH_FAILURE_RESP)
       {
          //Check current time
-         if(timeCompare(time, sa->timestamp + sa->timeout) >= 0)
+         if((time - sa->timestamp) >= sa->timeout)
          {
             //The initiator must retransmit the request until it either receives
             //a corresponding response or deems the IKE SA to have failed (refer
@@ -248,26 +250,32 @@ error_t ikeProcessSaEvents(IkeSaEntry *sa)
    //Get current time
    time = osGetSystemTime();
 
-#if (IKE_DPD_SUPPORT == ENABLED)
+#if (IKE_CREATE_CHILD_SA_SUPPORT == ENABLED)
    //Check the state of the IKE SA
    if(sa->state == IKE_SA_STATE_OPEN)
    {
-      //Check whether the dead peer detection mechanism is enabled
-      if(sa->dpdPeriod != 0)
+      //Check whether rekeying is enabled
+      if(sa->lifetime != 0)
       {
-         //Check whether the DPD period has expired
-         if(timeCompare(time, sa->dpdStart + sa->dpdPeriod) >= 0)
+         //Check whether the lifetime of the IKE SA has expired
+         if((time - sa->lifetimeStart) >= sa->lifetime)
          {
-            //If no cryptographically protected messages have been received on
-            //an IKE SA or any of its Child SAs recently, the system needs to
-            //perform a liveness check in order to prevent sending messages to
-            //a dead peer liveness of the other endpoint to avoid black holes
-            error = ikeProcessSaDpdEvent(sa);
+            //Reestablishment of Security Associations to take the place of ones
+            //that expire is referred to as rekeying
+            sa->rekeyRequest = TRUE;
          }
+      }
+
+      //Check whether the IKE SA should be rekeyed
+      if(sa->rekeyRequest)
+      {
+         //Rekey the specified IKE SA
+         error = ikeProcessSaRekeyEvent(sa);
       }
    }
 #endif
 
+#if (IKE_REAUTH_SUPPORT == ENABLED)
    //Check the state of the IKE SA
    if(sa->state == IKE_SA_STATE_OPEN && !error)
    {
@@ -280,7 +288,7 @@ error_t ikeProcessSaEvents(IkeSaEntry *sa)
          if(sa->originalInitiator)
          {
             //Check whether the reauthentication period has expired
-            if(timeCompare(time, sa->lifetimeStart + sa->reauthPeriod) >= 0)
+            if((time - sa->lifetimeStart) >= sa->reauthPeriod)
             {
                //IKEv2 does not have any special support for reauthentication.
                //Reauthentication is done by creating a new IKE SA from scratch,
@@ -298,6 +306,48 @@ error_t ikeProcessSaEvents(IkeSaEntry *sa)
          }
       }
    }
+#endif
+
+#if (IKE_DPD_SUPPORT == ENABLED)
+   //Check the state of the IKE SA
+   if(sa->state == IKE_SA_STATE_OPEN && !error)
+   {
+      //Check whether the dead peer detection mechanism is enabled
+      if(sa->dpdPeriod != 0)
+      {
+         //Check whether the DPD period has expired
+         if((time - sa->dpdTimestamp) >= sa->dpdPeriod)
+         {
+            //If no cryptographically protected messages have been received on
+            //an IKE SA or any of its Child SAs recently, the system needs to
+            //perform a liveness check in order to prevent sending messages to
+            //a dead peer liveness of the other endpoint to avoid black holes
+            error = ikeProcessSaDpdEvent(sa);
+         }
+      }
+   }
+#endif
+
+#if (IKE_NAT_TRAVERSAL_SUPPORT == ENABLED)
+   //Check the state of the IKE SA
+   if(sa->state >= IKE_SA_STATE_INIT_REQ && !error)
+   {
+      //Check whether the NAT keepalive mechanism is enabled
+      if(sa->localNat && context->natKeepaliveInterval != 0)
+      {
+         //A peer should send a NAT-keepalive packet if no other packet to
+         //the peer has been sent in M seconds. M is a locally configurable
+         //parameter with a default value of 20 seconds (refer to RFC 3948,
+         //section 4)
+         if((time - sa->natKeepAliveTimestamp) >= context->natKeepaliveInterval)
+         {
+            //The sole purpose of sending NAT-keepalive packets is to keep NAT
+            //mappings alive for the duration of a connection between the peers
+            error = ikeSendNatKeepalive(sa);
+         }
+      }
+   }
+#endif
 
    //Check the state of the IKE SA
    if(sa->state == IKE_SA_STATE_OPEN && !error)
@@ -351,6 +401,38 @@ error_t ikeProcessChildSaEvents(IkeChildSaEntry *childSa)
    //Point to the IKE SA
    sa = childSa->sa;
 
+#if (IKE_CREATE_CHILD_SA_SUPPORT == ENABLED)
+   //Check the state of the IKE SA
+   if(sa->state == IKE_SA_STATE_OPEN)
+   {
+      systime_t time;
+      IkeContext *context;
+
+      //Point to the IKE context
+      context = childSa->context;
+      //Get current time
+      time = osGetSystemTime();
+
+      //Check whether rekeying is enabled
+      if(context->childSaLifetime != 0)
+      {
+         //Check whether the lifetime of the Child SA has expired
+         if((time - childSa->lifetimeStart) >= context->childSaLifetime)
+         {
+            //Reestablishment of Security Associations to take the place of
+            //ones that expire is referred to as rekeying
+            childSa->rekeyRequest = TRUE;
+         }
+      }
+
+      //Check whether the Child SA should be rekeyed
+      if(childSa->rekeyRequest)
+      {
+         //Rekey the specified Child SA
+         error = ikeProcessChildSaRekeyEvent(childSa);
+      }
+   }
+#endif
 
    //Check the state of the IKE SA
    if(sa->state == IKE_SA_STATE_OPEN && !error)
@@ -428,14 +510,16 @@ error_t ikeProcessSaInitEvent(IkeSaEntry *sa)
       if(!error)
       {
          //Generate an ephemeral key pair
-         error = ikeGenerateDhKeyPair(sa);
+         error = ikeGenerateKeyPair(&sa->keContext, context->prngAlgo,
+            context->prngContext);
       }
 
       //Check status code
       if(!error)
       {
-         //The first exchange of an IKE session, IKE_SA_INIT, negotiates security
-         //parameters for the IKE SA, sends nonces, and sends Diffie-Hellman values
+         //The first exchange of an IKE session, IKE_SA_INIT, negotiates
+         //security parameters for the IKE SA, sends nonces, and sends
+         //Diffie-Hellman values
          error = ikeSendIkeSaInitRequest(sa);
       }
    }
@@ -478,6 +562,7 @@ error_t ikeProcessSaDpdEvent(IkeSaEntry *sa)
 
 error_t ikeProcessSaRekeyEvent(IkeSaEntry *sa)
 {
+#if (IKE_CREATE_CHILD_SA_SUPPORT == ENABLED)
    error_t error;
    IkeContext *context;
    IkeSaEntry *newSa;
@@ -496,14 +581,17 @@ error_t ikeProcessSaRekeyEvent(IkeSaEntry *sa)
    {
       //Initialize IKE SA
       newSa->remoteIpAddr = sa->remoteIpAddr;
-      newSa->remotePort = sa->remotePort;
+#if (IKE_NAT_TRAVERSAL_SUPPORT == ENABLED)
+      newSa->localNat = sa->localNat;
+      newSa->remoteNat = sa->remoteNat;
+#endif
 
       //The initiator of the rekey exchange is the new "original initiator"
       //of the new IKE SA (refer to RFC 7296, section 1.3.2)
       newSa->originalInitiator = TRUE;
 
       //Select the preferred key exchange method
-      newSa->groupNum = context->preferredGroupNum;
+      newSa->keContext.groupNum = context->preferredGroupNum;
 
       //Each endpoint chooses one of the two SPIs and must choose them so as to
       //be unique identifiers of an IKE SA (refer to RFC 7296, section 2.6)
@@ -522,7 +610,8 @@ error_t ikeProcessSaRekeyEvent(IkeSaEntry *sa)
       if(!error)
       {
          //Generate an ephemeral key pair
-         error = ikeGenerateDhKeyPair(newSa);
+         error = ikeGenerateKeyPair(&newSa->keContext, context->prngAlgo,
+            context->prngContext);
       }
 
       //Check status code
@@ -532,24 +621,36 @@ error_t ikeProcessSaRekeyEvent(IkeSaEntry *sa)
          sa->rekeyRequest = FALSE;
 
          //Attach the newly created IKE SA
-         sa->newSa = newSa;
+         sa->newSa1 = newSa;
+         sa->newSa2 = NULL;
 
          //Update the state of the IKE SA
          ikeChangeSaState(sa, IKE_SA_STATE_REKEY_REQ);
 
-         //To rekey an IKE SA, establish a new equivalent IKE SA with the peer to
-         //whom the old IKE SA is shared using a CREATE_CHILD_SA within the existing
-         //IKE SA (refer to RFC 7296, section 2.8)
-         ikeSendCreateChildSaRequest(sa, sa->childSa);
+         //To rekey an IKE SA, establish a new equivalent IKE SA with the peer
+         //to whom the old IKE SA is shared using a CREATE_CHILD_SA within the
+         //existing IKE SA (refer to RFC 7296, section 2.8)
+         ikeSendCreateChildSaRequest(sa);
+      }
+      else
+      {
+         //Clean up any side effects
+         ikeDeleteSaEntry(newSa);
       }
    }
    else
    {
       //Failed to create IKE SA
+      error = ERROR_OUT_OF_RESOURCES;
    }
 
    //Return status code
    return error;
+#else
+   //Minimal implementations are not required to support the CREATE_CHILD_SA
+   //exchange (refer to RFC 7296, section 4)
+   return ERROR_NOT_IMPLEMENTED;
+#endif
 }
 
 
@@ -561,6 +662,7 @@ error_t ikeProcessSaRekeyEvent(IkeSaEntry *sa)
 
 error_t ikeProcessSaReauthEvent(IkeSaEntry *sa)
 {
+#if (IKE_REAUTH_SUPPORT == ENABLED)
    error_t error;
    IkeContext *context;
    IkeSaEntry *newSa;
@@ -573,7 +675,7 @@ error_t ikeProcessSaReauthEvent(IkeSaEntry *sa)
    //Point to the IKE context
    context = sa->context;
    //Point to the Child SA
-   childSa = sa->childSa;
+   childSa = sa->childSa1;
 
    //Sanity check
    if(childSa != NULL)
@@ -595,17 +697,19 @@ error_t ikeProcessSaReauthEvent(IkeSaEntry *sa)
          {
             //Initialize IKE SA
             newSa->remoteIpAddr = sa->remoteIpAddr;
-            newSa->remotePort = sa->remotePort;
-            newSa->remoteIpAddr = sa->remoteIpAddr;
-            newSa->remotePort = sa->remotePort;
-            newSa->childSa = newChildSa;
+#if (IKE_NAT_TRAVERSAL_SUPPORT == ENABLED)
+            newSa->localNat = sa->localNat;
+            newSa->remoteNat = sa->remoteNat;
+#endif
+            newSa->childSa1 = newChildSa;
+            newSa->childSa2 = NULL;
 
             //The initiator of the rekey exchange is the new "original initiator"
             //of the new IKE SA (refer to RFC 7296, section 1.3.2)
             newSa->originalInitiator = TRUE;
 
             //Select the preferred key exchange method
-            newSa->groupNum = context->preferredGroupNum;
+            newSa->keContext.groupNum = context->preferredGroupNum;
 
             //Initialize Child SA
             newChildSa->sa = newSa;
@@ -631,14 +735,16 @@ error_t ikeProcessSaReauthEvent(IkeSaEntry *sa)
             if(!error)
             {
                //Generate an ephemeral key pair
-               error = ikeGenerateDhKeyPair(newSa);
+               error = ikeGenerateKeyPair(&newSa->keContext, context->prngAlgo,
+                  context->prngContext);
             }
 
             //Check status code
             if(!error)
             {
-               //The first exchange of an IKE session, IKE_SA_INIT, negotiates security
-               //parameters for the IKE SA, sends nonces, and sends Diffie-Hellman values
+               //The first exchange of an IKE session, IKE_SA_INIT, negotiates
+               //security parameters for the IKE SA, sends nonces, and sends
+               //Diffie-Hellman values
                error = ikeSendIkeSaInitRequest(newSa);
             }
 
@@ -656,9 +762,9 @@ error_t ikeProcessSaReauthEvent(IkeSaEntry *sa)
          }
          else
          {
-            //Failed to create Child SA
+            //Clean up any side effects
             ikeDeleteSaEntry(newSa);
-            //Report en error
+            //Failed to create Child SA
             error = ERROR_OUT_OF_RESOURCES;
          }
       }
@@ -680,6 +786,10 @@ error_t ikeProcessSaReauthEvent(IkeSaEntry *sa)
 
    //Return status code
    return error;
+#else
+   //Reauthentication is not implemented
+   return ERROR_NOT_IMPLEMENTED;
+#endif
 }
 
 
@@ -693,13 +803,14 @@ error_t ikeProcessSaDeleteEvent(IkeSaEntry *sa)
 {
    //Acknowledge request
    sa->deleteRequest = FALSE;
-   sa->childSa = NULL;
+   sa->childSa1 = NULL;
+   sa->childSa2 = NULL;
 
    //Update the state of the IKE SA
    ikeChangeSaState(sa, IKE_SA_STATE_DELETE_REQ);
 
-   //To delete an SA, an INFORMATIONAL exchange with one or more Delete payloads
-   //is sent listing the SPIs of the SAs to be deleted
+   //To delete an SA, an INFORMATIONAL exchange with one or more Delete
+   //payloads is sent listing the SPIs of the SAs to be deleted
    return ikeSendInfoRequest(sa);
 }
 
@@ -715,6 +826,10 @@ error_t ikeProcessChildSaInitEvent(IkeChildSaEntry *childSa)
    error_t error;
    IkeContext *context;
    IkeSaEntry *sa;
+#if (IKE_CREATE_CHILD_SA_SUPPORT == ENABLED)
+   uint_t i;
+   IkeSaEntry *bestSa;
+#endif
 
    //Initialize status code
    error = NO_ERROR;
@@ -722,6 +837,91 @@ error_t ikeProcessChildSaInitEvent(IkeChildSaEntry *childSa)
    //Point to the IKE context
    context = childSa->context;
 
+#if (IKE_CREATE_CHILD_SA_SUPPORT == ENABLED)
+   //Loop through IKE SA entries
+   for(bestSa = NULL, i = 0; i < context->numSaEntries; i++)
+   {
+      //Point to the current IKE SA
+      sa = &context->sa[i];
+
+      //Check whether the current IKE SA matches the peer's IP address
+      if(sa->state != IKE_SA_STATE_CLOSED &&
+         ipCompAddr(&sa->remoteIpAddr, &childSa->remoteIpAddr))
+      {
+         //Prefer an IKE SA that is known to be alive
+         if(bestSa == NULL)
+         {
+            bestSa = sa;
+         }
+         else if(sa->state == IKE_SA_STATE_OPEN &&
+            bestSa->state != IKE_SA_STATE_OPEN)
+         {
+            bestSa = sa;
+         }
+         else
+         {
+         }
+      }
+   }
+
+   //A minimal implementation need not be able to initiate a CREATE_CHILD_SA
+   //exchange (refer to RFC 7296, section 4)
+   if(bestSa != NULL && !bestSa->noAdditionalSas)
+   {
+      //Check the state of the IKE SA
+      if(bestSa->state == IKE_SA_STATE_OPEN)
+      {
+         //Attach the Child SA to the IKE SA
+         bestSa->childSa1 = childSa;
+         bestSa->childSa2 = NULL;
+         childSa->sa = bestSa;
+
+         //Generate a new SPI for the Child SA
+         error = ikeGenerateChildSaSpi(childSa, childSa->localSpi);
+
+         //Check status code
+         if(!error)
+         {
+            //Nonces used in IKEv2 must be randomly chosen and must be at least
+            //128 bits in size (refer to RFC 7296, section 2.10)
+            error = ikeGenerateNonce(context, childSa->initiatorNonce,
+               &childSa->initiatorNonceLen);
+         }
+
+#if (IKE_CHILD_SA_PFS_SUPPORT == ENABLED)
+         //Check status code
+         if(!error)
+         {
+            //Perfect forward secrecy?
+            if(childSa->pfs)
+            {
+               //Select the preferred key exchange method
+               childSa->keContext.groupNum = context->preferredGroupNum;
+
+               //Generate an ephemeral key pair
+               error = ikeGenerateKeyPair(&childSa->keContext,
+                  context->prngAlgo, context->prngContext);
+            }
+         }
+#endif
+         //Check status code
+         if(!error)
+         {
+            //Update the state of the IKE SA
+            ikeChangeSaState(bestSa, IKE_SA_STATE_CREATE_CHILD_REQ);
+
+            //The initiator begins negotiation of a Child SA using the
+            //CREATE_CHILD_SA exchange
+            error = ikeSendCreateChildSaRequest(bestSa);
+         }
+      }
+      else
+      {
+         //Wait for the IKE SA negotiation to complete
+      }
+   }
+   else
+#endif
    {
       //Create a new IKE SA
       sa = ikeCreateSaEntry(context);
@@ -731,15 +931,14 @@ error_t ikeProcessChildSaInitEvent(IkeChildSaEntry *childSa)
       {
          //Initialize IKE SA
          sa->remoteIpAddr = childSa->remoteIpAddr;
-         sa->remotePort = IKE_PORT;
-         sa->childSa = childSa;
+         sa->childSa1 = childSa;
 
          //The original initiator always refers to the party who initiated the
          //exchange (refer to RFC 7296, section 2.2)
          sa->originalInitiator = TRUE;
 
          //Select the preferred key exchange method
-         sa->groupNum = context->preferredGroupNum;
+         sa->keContext.groupNum = context->preferredGroupNum;
 
          //Attach the newly created IKE SA to the Child SA
          childSa->sa = sa;
@@ -752,6 +951,7 @@ error_t ikeProcessChildSaInitEvent(IkeChildSaEntry *childSa)
       else
       {
          //Failed to create IKE SA
+         error = ERROR_OUT_OF_RESOURCES;
       }
    }
 
@@ -768,6 +968,7 @@ error_t ikeProcessChildSaInitEvent(IkeChildSaEntry *childSa)
 
 error_t ikeProcessChildSaRekeyEvent(IkeChildSaEntry *childSa)
 {
+#if (IKE_CREATE_CHILD_SA_SUPPORT == ENABLED)
    error_t error;
    IkeSaEntry *sa;
    IkeContext *context;
@@ -790,9 +991,16 @@ error_t ikeProcessChildSaRekeyEvent(IkeChildSaEntry *childSa)
       //Initialize Child SA
       newChildSa->sa = sa;
       newChildSa->oldChildSa = childSa;
-      newChildSa->protocol = childSa->protocol;
       newChildSa->mode = childSa->mode;
+      newChildSa->protocol = childSa->protocol;
+#if (IKE_CHILD_SA_PFS_SUPPORT == ENABLED)
+      newChildSa->pfs = childSa->pfs;
+#endif
       newChildSa->initiator = TRUE;
+
+      //When the initiator attempts to rekey the Child SA, the proposed Traffic
+      //Selectors should be either the same as, or a superset of, the Traffic
+      //Selectors used in the old Child SA (refer to RFC 7296, section 2.9.2)
       newChildSa->selector = childSa->selector;
 
       //Generate a new SPI for the Child SA
@@ -807,6 +1015,30 @@ error_t ikeProcessChildSaRekeyEvent(IkeChildSaEntry *childSa)
             &newChildSa->initiatorNonceLen);
       }
 
+#if (IKE_CHILD_SA_PFS_SUPPORT == ENABLED)
+      //Check status code
+      if(!error)
+      {
+         //Perfect forward secrecy?
+         if(newChildSa->pfs)
+         {
+            //Select the preferred key exchange method
+            if(childSa->keContext.groupNum != IKE_TRANSFORM_ID_KE_NONE)
+            {
+               newChildSa->keContext.groupNum = childSa->keContext.groupNum;
+            }
+            else
+            {
+               newChildSa->keContext.groupNum = context->preferredGroupNum;
+            }
+
+            //Generate an ephemeral key pair
+            error = ikeGenerateKeyPair(&newChildSa->keContext,
+               context->prngAlgo, context->prngContext);
+         }
+      }
+#endif
+
       //Check status code
       if(!error)
       {
@@ -814,7 +1046,8 @@ error_t ikeProcessChildSaRekeyEvent(IkeChildSaEntry *childSa)
          childSa->rekeyRequest = FALSE;
 
          //Attach the newly created Child SA to the IKE SA
-         sa->childSa = newChildSa;
+         sa->childSa1 = newChildSa;
+         sa->childSa2 = NULL;
 
          //Update the state of the IKE SA
          ikeChangeSaState(sa, IKE_SA_STATE_REKEY_CHILD_REQ);
@@ -824,16 +1057,27 @@ error_t ikeProcessChildSaRekeyEvent(IkeChildSaEntry *childSa)
          //To rekey a Child SA within an existing IKE SA, create a new
          //equivalent SA, and when the new one is established, delete the
          //old one
-         error = ikeSendCreateChildSaRequest(sa, newChildSa);
+         error = ikeSendCreateChildSaRequest(sa);
+      }
+      else
+      {
+         //Clean up any side effects
+         ikeDeleteChildSaEntry(newChildSa);
       }
    }
    else
    {
       //Failed to create Child SA
+      error = ERROR_OUT_OF_RESOURCES;
    }
 
    //Return status code
    return error;
+#else
+   //Minimal implementations are not required to support the CREATE_CHILD_SA
+   //exchange (refer to RFC 7296, section 4)
+   return ERROR_NOT_IMPLEMENTED;
+#endif
 }
 
 
@@ -854,7 +1098,8 @@ error_t ikeProcessChildSaDeleteEvent(IkeChildSaEntry *childSa)
    childSa->deleteRequest = FALSE;
 
    //Attach the Child SA to the IKE SA
-   sa->childSa = childSa;
+   sa->childSa1 = childSa;
+   sa->childSa2 = NULL;
 
    //Update the state of the IKE SA
    ikeChangeSaState(sa, IKE_SA_STATE_DELETE_CHILD_REQ);

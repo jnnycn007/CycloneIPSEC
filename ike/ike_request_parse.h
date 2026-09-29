@@ -1,6 +1,6 @@
 /**
- * @file ike_message_encrypt.h
- * @brief IKE message encryption
+ * @file ike_request_parse.h
+ * @brief IKE request parsing
  *
  * @section License
  *
@@ -28,11 +28,12 @@
  * @version 2.6.6
  **/
 
-#ifndef _IKE_MESSAGE_ENCRYPT_H
-#define _IKE_MESSAGE_ENCRYPT_H
+#ifndef _IKE_REQUEST_PARSE_H
+#define _IKE_REQUEST_PARSE_H
 
 //Dependencies
 #include "ike/ike.h"
+#include "ike/ike_payload_parse.h"
 
 //C++ guard
 #ifdef __cplusplus
@@ -40,14 +41,28 @@ extern "C" {
 #endif
 
 //IKE related functions
-error_t ikeEncryptMessage(IkeSaEntry *sa, uint8_t *message, size_t *messageLen);
+error_t ikeParseIkeSaInitRequest(IkeContext *context, const uint8_t *message,
+   size_t length);
 
-error_t ikeComputeChecksum(IkeSaEntry *sa, const uint8_t *message,
-   size_t length, uint8_t *icv);
+error_t ikeParseIkeAuthRequest(IkeSaEntry *sa, const uint8_t *message,
+   size_t length);
 
-size_t ikePadPayload(IkeSaEntry *sa, uint8_t *data, size_t length);
+error_t ikeParseCreateChildSaRequest(IkeSaEntry *sa, const uint8_t *message,
+   size_t length);
 
-void ikeGenerateIv(uint8_t *iv);
+error_t ikeParseInfoRequest(IkeSaEntry *sa, const uint8_t *message,
+   size_t length);
+
+void ikeProcessInitialChildSaCreateRequest(IkeSaEntry *sa,
+   IkeMessagePayloads *payloads);
+
+void ikeProcessChildSaCreateRequest(IkeSaEntry *sa, IkeChildSaEntry *oldChildSa,
+   IkeMessagePayloads *payloads);
+
+void ikeProcessChildSaRekeyRequest(IkeSaEntry *sa,
+   IkeMessagePayloads *payloads);
+
+void ikeProcessIkeSaRekeyRequest(IkeSaEntry *sa, IkeMessagePayloads *payloads);
 
 //C++ guard
 #ifdef __cplusplus

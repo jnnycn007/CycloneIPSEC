@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 //Switch to the appropriate trace level
@@ -34,6 +34,7 @@
 //Dependencies
 #include "ipsec/ipsec.h"
 #include "ipsec/ipsec_inbound.h"
+#include "ipsec/ipsec_outbound.h"
 #include "ipsec/ipsec_anti_replay.h"
 #include "ipsec/ipsec_misc.h"
 #include "ah/ah.h"
@@ -47,6 +48,101 @@
 
 
 /**
+ * @brief Protect an outbound IPv4 packet using AH
+ * @param[in] context Pointer to the IPsec context
+ * @param[in] sa Pointer to the security association
+ * @param[in] interface Underlying network interface
+ * @param[in] pseudoHeader IPv4 pseudo header
+ * @param[in] fragId Fragment identification field
+ * @param[in] buffer Multi-part buffer containing the payload
+ * @param[in] offset Offset to the first byte of the payload
+ * @param[in] ancillary Additional options passed to the stack along with
+ *   the packet
+ * @return Error code
+ **/
+
+error_t ahProtectOutboundIpv4Packet(IpsecContext *context, IpsecSadEntry *sa,
+   NetInterface *interface, const Ipv4PseudoHeader *pseudoHeader,
+   uint16_t fragId, NetBuffer *buffer, size_t offset,
+   NetTxAncillary *ancillary)
+{
+   error_t error;
+   size_t length;
+   AhHeader *ahHeader;
+   Ipv4Header ipv4Header;
+   Ipv4PseudoHeader pseudoHeader2;
+
+   //Retrieve the length of the data
+   length = netBufferGetLength(buffer) - offset;
+
+   //Sanity check
+   if(offset < (sizeof(AhHeader) + sa->icvLen))
+      return ERROR_FAILURE;
+
+   //Make room for the AH header
+   offset -= sizeof(AhHeader) + sa->icvLen;
+   length += sizeof(AhHeader) + sa->icvLen;
+
+   //The AH header is inserted after the IP header and before a next layer
+   //protocol
+   ahHeader = netBufferAt(buffer, offset, 0);
+
+   //The sender increments the sequence number counter for this SA and inserts
+   //the low-order 32 bits of the value into the Sequence Number field (refer
+   //to RFC 4302, section 3.3.2)
+   sa->seqNum++;
+
+   //Format AH header
+   ahHeader->nextHeader = pseudoHeader->protocol;
+   ahHeader->payloadLen = (sizeof(AhHeader) + sa->icvLen) / 4 - 2;
+   ahHeader->reserved = 0;
+   ahHeader->spi = htonl(sa->spi);
+   ahHeader->seqNum = htonl(sa->seqNum);
+
+   //The Integrity Check Value field is also set to zero in preparation for
+   //this computation (refer to RFC 4302, section 3.3.3.1)
+   osMemset(ahHeader->icv, 0, sa->icvLen);
+
+   //Format outer IPv4 header
+   osMemset(&ipv4Header, 0, sizeof(Ipv4Header));
+   ipv4Header.version = IPV4_VERSION;
+   ipv4Header.headerLength = 5;
+   ipv4Header.typeOfService = 0;
+   ipv4Header.totalLength = htons(length + sizeof(Ipv4Header));
+   ipv4Header.identification = htons(fragId);
+   ipv4Header.fragmentOffset = 0;
+   ipv4Header.timeToLive = 0;
+   ipv4Header.protocol = IPV4_PROTOCOL_AH;
+   ipv4Header.headerChecksum = 0;
+   ipv4Header.srcAddr = pseudoHeader->srcAddr;
+   ipv4Header.destAddr = pseudoHeader->destAddr;
+
+   //Compute ICV value
+   error = ahGenerateIcv(context, sa, &ipv4Header, ahHeader, buffer,
+      offset + sizeof(AhHeader) + sa->icvLen);
+   //Any error to report?
+   if(error)
+      return error;
+
+   //Fix the Next Layer Protocol value
+   pseudoHeader2 = *pseudoHeader;
+   pseudoHeader2.protocol = IPV4_PROTOCOL_AH;
+
+   //Debug message
+   TRACE_INFO("AH Header:\r\n");
+   //Dump AH header contents for debugging purpose
+   ahDumpHeader(ahHeader);
+
+   //Send AH packet
+   error = ipsecSendIpv4Packet(interface, &pseudoHeader2, fragId, buffer,
+      offset, ancillary);
+
+   //Return status code
+   return error;
+}
+
+
+/**
  * @brief Process AH protected packet
  * @param[in] interface Underlying network interface
  * @param[in] ipv4Header Pointer to the IPv4 header
@@ -57,7 +153,7 @@
  * @return Error code
  **/
 
-error_t ipv4ProcessAhHeader(NetInterface *interface,
+error_t ahProcessInboundIpv4Packet(NetInterface *interface,
    const Ipv4Header *ipv4Header, const NetBuffer *buffer, size_t offset,
    NetRxAncillary *ancillary)
 {
@@ -85,8 +181,8 @@ error_t ipv4ProcessAhHeader(NetInterface *interface,
       return ERROR_INVALID_HEADER;
 
    //Point to the AH header
-   ahHeader = netBufferAt(buffer, offset, 0);
-   //Sanity check
+   ahHeader = netBufferAt(buffer, offset, sizeof(AhHeader));
+   //Malformed AH packet?
    if(ahHeader == NULL)
       return ERROR_FAILURE;
 
@@ -197,72 +293,8 @@ error_t ipv4ProcessAhHeader(NetInterface *interface,
 
    //If the computed and received ICVs match, then the datagram is valid, and
    //it is accepted (refer to RFC 4302, section 3.4.4)
-   switch(ahHeader->nextHeader)
-   {
-   //ICMP protocol?
-   case IPV4_PROTOCOL_ICMP:
-      //Process incoming ICMP message
-      icmpProcessMessage(interface, &pseudoHeader.ipv4Data, buffer, offset);
-
-#if (RAW_SOCKET_SUPPORT == ENABLED)
-      //Allow raw sockets to process ICMP messages
-      rawSocketProcessIpPacket(interface, &pseudoHeader, buffer, offset,
-         ancillary);
-#endif
-
-      //Continue processing
-      break;
-
-#if (IGMP_HOST_SUPPORT == ENABLED || IGMP_ROUTER_SUPPORT == ENABLED || \
-   IGMP_SNOOPING_SUPPORT == ENABLED)
-   //IGMP protocol?
-   case IPV4_PROTOCOL_IGMP:
-      //Process incoming IGMP message
-      igmpProcessMessage(interface, &pseudoHeader.ipv4Data, buffer, offset,
-         ancillary);
-
-#if (RAW_SOCKET_SUPPORT == ENABLED)
-      //Allow raw sockets to process IGMP messages
-      rawSocketProcessIpPacket(interface, &pseudoHeader, buffer, offset,
-         ancillary);
-#endif
-
-      //Continue processing
-      break;
-#endif
-
-#if (TCP_SUPPORT == ENABLED)
-   //TCP protocol?
-   case IPV4_PROTOCOL_TCP:
-      //Process incoming TCP segment
-      tcpProcessSegment(interface, &pseudoHeader, buffer, offset, ancillary);
-      //Continue processing
-      break;
-#endif
-
-#if (UDP_SUPPORT == ENABLED)
-   //UDP protocol?
-   case IPV4_PROTOCOL_UDP:
-      //Process incoming UDP datagram
-      error = udpProcessDatagram(interface, &pseudoHeader, buffer, offset,
-         ancillary);
-      //Continue processing
-      break;
-#endif
-
-   //Unknown protocol?
-   default:
-#if (RAW_SOCKET_SUPPORT == ENABLED)
-      //Allow raw sockets to process IPv4 packets
-      error = rawSocketProcessIpPacket(interface, &pseudoHeader, buffer, offset,
-         ancillary);
-#else
-      //Report an error
-      error = ERROR_PROTOCOL_UNREACHABLE;
-#endif
-      //Continue processing
-      break;
-   }
+   error = ipv4DispatchDatagram(interface, &pseudoHeader, buffer, offset,
+      ancillary);
 
    //Return status code
    return error;
@@ -291,12 +323,12 @@ error_t ahGenerateIcv(IpsecContext *context, IpsecSadEntry *sa,
 
 #if (AH_CMAC_SUPPORT == ENABLED)
    //CMAC integrity algorithm?
-   if(sa->authCipherAlgo != NULL)
+   if(sa->authMacAlgo == MAC_ALGO_CMAC)
    {
       CmacContext *cmacContext;
 
       //Point to the CMAC context
-      cmacContext = &context->cmacContext;
+      cmacContext = &context->macContext.cmacContext;
 
       //The SAD entry specifies the algorithm employed for ICV computation
       error = cmacInit(cmacContext, sa->authCipherAlgo, sa->authKey,
@@ -359,12 +391,12 @@ error_t ahGenerateIcv(IpsecContext *context, IpsecSadEntry *sa,
 #endif
 #if (AH_HMAC_SUPPORT == ENABLED)
    //HMAC integrity algorithm?
-   if(sa->authHashAlgo != NULL)
+   if(sa->authMacAlgo == MAC_ALGO_HMAC)
    {
       HmacContext *hmacContext;
 
       //Point to the HMAC context
-      hmacContext = &context->hmacContext;
+      hmacContext = &context->macContext.hmacContext;
 
       //The SAD entry specifies the algorithm employed for ICV computation
       error = hmacInit(hmacContext, sa->authHashAlgo, sa->authKey,
@@ -482,12 +514,12 @@ error_t ahVerifyIcv(IpsecContext *context, IpsecSadEntry *sa,
 
 #if (AH_CMAC_SUPPORT == ENABLED)
    //CMAC integrity algorithm?
-   if(sa->authCipherAlgo != NULL)
+   if(sa->authMacAlgo == MAC_ALGO_CMAC)
    {
       CmacContext *cmacContext;
 
       //Point to the CMAC context
-      cmacContext = &context->cmacContext;
+      cmacContext = &context->macContext.cmacContext;
 
       //The SAD entry specifies the algorithm employed for ICV computation,
       //and indicates the key required to validate the ICV
@@ -567,12 +599,12 @@ error_t ahVerifyIcv(IpsecContext *context, IpsecSadEntry *sa,
 #endif
 #if (AH_HMAC_SUPPORT == ENABLED)
    //HMAC integrity algorithm?
-   if(sa->authHashAlgo != NULL)
+   if(sa->authMacAlgo == MAC_ALGO_HMAC)
    {
       HmacContext *hmacContext;
 
       //Point to the HMAC context
-      hmacContext = &context->hmacContext;
+      hmacContext = &context->macContext.hmacContext;
 
       //The SAD entry specifies the algorithm employed for ICV computation,
       //and indicates the key required to validate the ICV
@@ -718,14 +750,18 @@ void ahProcessMutableIpv4Options(Ipv4Header *header)
       {
          //Malformed option?
          if((i + 1) >= length)
+         {
             break;
+         }
 
          //The option code is followed by a one-byte length field
          n = option->length;
 
          //Check the length of the option
          if(n < sizeof(Ipv4Option) || (i + n) > length)
+         {
             break;
+         }
 
          //Mutable option?
          if(option->type != IPV4_OPTION_SEC &&

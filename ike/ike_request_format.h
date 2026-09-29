@@ -1,6 +1,6 @@
 /**
- * @file ike_message_parse.h
- * @brief IKE message parsing
+ * @file ike_request_format.h
+ * @brief IKE request formatting
  *
  * @section License
  *
@@ -25,11 +25,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
-#ifndef _IKE_MESSAGE_PARSE_H
-#define _IKE_MESSAGE_PARSE_H
+#ifndef _IKE_REQUEST_FORMAT_H
+#define _IKE_REQUEST_FORMAT_H
 
 //Dependencies
 #include "ike/ike.h"
@@ -40,33 +40,28 @@ extern "C" {
 #endif
 
 //IKE related functions
-error_t ikeProcessMessage(IkeContext *context, uint8_t *message, size_t length);
-error_t ikeProcessRequest(IkeContext *context, uint8_t *message, size_t length);
-error_t ikeProcessResponse(IkeContext *context, uint8_t *message, size_t length);
+error_t ikeSendRequest(IkeSaEntry *sa);
 
-error_t ikeProcessIkeSaInitRequest(IkeContext *context, const uint8_t *message,
-   size_t length);
+error_t ikeSendIkeSaInitRequest(IkeSaEntry *sa);
+error_t ikeSendIkeAuthRequest(IkeSaEntry *sa);
+error_t ikeSendCreateChildSaRequest(IkeSaEntry *sa);
+error_t ikeSendInfoRequest(IkeSaEntry *sa);
+error_t ikeSendNatKeepalive(IkeSaEntry *sa);
 
-error_t ikeProcessIkeSaInitResponse(IkeSaEntry *sa, const uint8_t *message,
-   size_t length);
+error_t ikeFormatIkeSaInitRequest(IkeSaEntry *sa, uint8_t *p, size_t *length);
+error_t ikeFormatIkeAuthRequest(IkeSaEntry *sa, uint8_t *p, size_t *length);
 
-error_t ikeProcessIkeAuthRequest(IkeSaEntry *sa, const uint8_t *message,
-   size_t length);
+error_t ikeFormatCreateChildSaRequest(IkeSaEntry *sa, uint8_t *p,
+   size_t *length);
 
-error_t ikeProcessIkeAuthResponse(IkeSaEntry *sa, const uint8_t *message,
-   size_t length);
+error_t ikeFormatInfoRequest(IkeSaEntry *sa, uint8_t *p,
+   size_t *length);
 
-error_t ikeProcessCreateChildSaRequest(IkeSaEntry *sa, const uint8_t *message,
-   size_t length);
+error_t ikeFormatChildSaCreateRequest(IkeSaEntry *sa, uint8_t *p,
+   size_t *length, uint8_t **nextPayload);
 
-error_t ikeProcessCreateChildSaResponse(IkeSaEntry *sa, const uint8_t *message,
-   size_t length);
-
-error_t ikeProcessInfoRequest(IkeSaEntry *sa, const uint8_t *message,
-   size_t length);
-
-error_t ikeProcessInfoResponse(IkeSaEntry *sa, const uint8_t *message,
-   size_t length);
+error_t ikeFormatIkeSaRekeyRequest(IkeSaEntry *sa, uint8_t *p, size_t *length,
+   uint8_t **nextPayload);
 
 //C++ guard
 #ifdef __cplusplus

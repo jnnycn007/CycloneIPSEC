@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 #ifndef _IPSEC_H
@@ -81,13 +81,13 @@ struct _IpsecContext;
 #endif
 
 //Version string
-#define CYCLONE_IPSEC_VERSION_STRING "2.6.4"
+#define CYCLONE_IPSEC_VERSION_STRING "2.6.6"
 //Major version
 #define CYCLONE_IPSEC_MAJOR_VERSION 2
 //Minor version
 #define CYCLONE_IPSEC_MINOR_VERSION 6
 //Revision number
-#define CYCLONE_IPSEC_REV_NUMBER 4
+#define CYCLONE_IPSEC_REV_NUMBER 6
 
 //IPsec support
 #ifndef IPSEC_SUPPORT
@@ -137,6 +137,9 @@ struct _IpsecContext;
 #elif (IPSEC_MAX_AUTH_KEY_LEN < 1)
    #error IPSEC_MAX_AUTH_KEY_LEN parameter is not valid
 #endif
+
+//UDP port number used by IPsec NAT traversal
+#define IPSEC_NAT_PORT 4500
 
 //Size of SPI for AH and ESP protocols
 #define IPSEC_SPI_SIZE 4
@@ -352,6 +355,7 @@ typedef struct
    IpsecMode mode;                 ///<IPsec mode (tunnel or transport)
    IpsecProtocol protocol;         ///<Security protocol (AH or ESP)
    bool_t esn;                     ///<Extended sequence numbers
+   bool_t pfs;                     ///<Perfect forward secrecy
    IpAddr localTunnelAddr;         ///<Local tunnel IP address
    IpAddr remoteTunnelAddr;        ///<Remote tunnel IP address
 } IpsecSpdEntry;
@@ -380,6 +384,10 @@ struct _IpsecSadEntry
    uint8_t iv[16];                          ///<Initialization vector
    size_t ivLen;                            ///<Length of the initialization vector, in bytes
 #endif
+#if (ESP_SUPPORT == ENABLED && ESP_UDP_ENCAPS_SUPPORT == ENABLED)
+   bool_t udpEncapsulation;                 ///<UDP encapsulation of IPsec ESP packets
+#endif
+   MacAlgo authMacAlgo;                     ///<MAC algorithm for integrity calculations
    const HashAlgo *authHashAlgo;            ///<Hash algorithm for HMAC-based integrity calculations
    const CipherAlgo *authCipherAlgo;        ///<Cipher algorithm for CMAC-based integrity calculations
    uint8_t authKey[IPSEC_MAX_AUTH_KEY_LEN]; ///<Integrity protection key
@@ -446,15 +454,7 @@ struct _IpsecContext
    uint_t numSadEntries;            ///<Number of entries in the SAD database
    IpsecPadEntry *pad;              ///<Peer Authorization Database (PAD)
    uint_t numPadEntries;            ///<Number of entries in the PAD database
-#if (AH_CMAC_SUPPORT == ENABLED || ESP_CMAC_SUPPORT == ENABLED)
-   CmacContext cmacContext;         ///<CMAC context
-#endif
-#if (ESP_GMAC_SUPPORT == ENABLED)
-   GmacContext gmacContext;         ///<GMAC context
-#endif
-#if (AH_HMAC_SUPPORT == ENABLED || ESP_HMAC_SUPPORT == ENABLED)
-   HmacContext hmacContext;         ///<HMAC context
-#endif
+   MacContext macContext;           ///<MAC context
 #if (ESP_SUPPORT == ENABLED)
    uint8_t buffer[ESP_BUFFER_SIZE]; ///<Memory buffer for input/output operations
 #endif

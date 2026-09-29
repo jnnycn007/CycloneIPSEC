@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 //Dependencies
@@ -76,7 +76,7 @@ error_t ipsecProcessInboundIpv4Packet(NetInterface *interface,
       {
          //Search the SPD for a matching entry
          spdEntry = ipsecFindSpdEntry(interface->netContext->ipsecContext,
-            IPSEC_POLICY_ACTION_INVALID, &selector);
+            IPSEC_POLICY_ACTION_INVALID, &selector, TRUE);
 
          //Any SPD entry found?
          if(spdEntry != NULL)

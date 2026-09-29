@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 //Switch to the appropriate trace level
@@ -361,13 +361,12 @@ error_t ikeVerifyChecksum(IkeSaEntry *sa, const uint8_t *message,
 
 #if (IKE_CMAC_AUTH_SUPPORT == ENABLED)
    //CMAC integrity algorithm?
-   if(sa->authAlgoId == IKE_TRANSFORM_ID_AUTH_AES_CMAC_96 &&
-      sa->authCipherAlgo != NULL)
+   if(sa->authMacAlgo == MAC_ALGO_CMAC)
    {
       CmacContext *cmacContext;
 
       //Point to the CMAC context
-      cmacContext = &sa->context->cmacContext;
+      cmacContext = &sa->context->macContext.cmacContext;
 
       //Initialize CMAC calculation
       error = cmacInit(cmacContext, sa->authCipherAlgo, authKey,
@@ -386,12 +385,12 @@ error_t ikeVerifyChecksum(IkeSaEntry *sa, const uint8_t *message,
 #endif
 #if (IKE_HMAC_AUTH_SUPPORT == ENABLED)
    //HMAC integrity algorithm?
-   if(sa->authHashAlgo != NULL)
+   if(sa->authMacAlgo == MAC_ALGO_HMAC)
    {
       HmacContext *hmacContext;
 
       //Point to the HMAC context
-      hmacContext = &sa->context->hmacContext;
+      hmacContext = &sa->context->macContext.hmacContext;
 
       //Initialize HMAC calculation
       error = hmacInit(hmacContext, sa->authHashAlgo, authKey, sa->authKeyLen);
@@ -409,13 +408,12 @@ error_t ikeVerifyChecksum(IkeSaEntry *sa, const uint8_t *message,
 #endif
 #if (IKE_XCBC_MAC_AUTH_SUPPORT == ENABLED)
    //XCBC-MAC integrity algorithm?
-   if(sa->authAlgoId == IKE_TRANSFORM_ID_AUTH_AES_XCBC_96 &&
-      sa->authCipherAlgo != NULL)
+   if(sa->authMacAlgo == MAC_ALGO_XCBC_MAC)
    {
       XcbcMacContext *xcbcMacContext;
 
       //Point to the XCBC-MAC context
-      xcbcMacContext = &sa->context->xcbcMacContext;
+      xcbcMacContext = &sa->context->macContext.xcbcMacContext;
 
       //Initialize XCBC-MAC calculation
       error = xcbcMacInit(xcbcMacContext, sa->authCipherAlgo, authKey,

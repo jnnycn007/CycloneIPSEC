@@ -1,6 +1,6 @@
 /**
- * @file ike_message_encrypt.h
- * @brief IKE message encryption
+ * @file ike_message_dispatch.h
+ * @brief IKE message dispatching
  *
  * @section License
  *
@@ -28,8 +28,8 @@
  * @version 2.6.6
  **/
 
-#ifndef _IKE_MESSAGE_ENCRYPT_H
-#define _IKE_MESSAGE_ENCRYPT_H
+#ifndef _IKE_MESSAGE_DISPATCH_H
+#define _IKE_MESSAGE_DISPATCH_H
 
 //Dependencies
 #include "ike/ike.h"
@@ -40,14 +40,9 @@ extern "C" {
 #endif
 
 //IKE related functions
-error_t ikeEncryptMessage(IkeSaEntry *sa, uint8_t *message, size_t *messageLen);
-
-error_t ikeComputeChecksum(IkeSaEntry *sa, const uint8_t *message,
-   size_t length, uint8_t *icv);
-
-size_t ikePadPayload(IkeSaEntry *sa, uint8_t *data, size_t length);
-
-void ikeGenerateIv(uint8_t *iv);
+error_t ikeDispatchMessage(IkeContext *context, uint8_t *message, size_t length);
+error_t ikeDispatchRequest(IkeContext *context, uint8_t *message, size_t length);
+error_t ikeDispatchResponse(IkeContext *context, uint8_t *message, size_t length);
 
 //C++ guard
 #ifdef __cplusplus

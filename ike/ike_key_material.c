@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 //Switch to the appropriate trace level
@@ -37,6 +37,7 @@
 #include "ike/ike_algorithms.h"
 #include "ah/ah_algorithms.h"
 #include "esp/esp_algorithms.h"
+#include "kdf/ike_kdf.h"
 #include "debug.h"
 
 //Check IKEv2 library configuration
@@ -53,11 +54,10 @@
 error_t ikeGenerateSaKeyMaterial(IkeSaEntry *sa, IkeSaEntry *oldSa)
 {
    error_t error;
-   size_t bufferLen;
    size_t keyMaterialLen;
    IkeContext *context;
    uint8_t skeyseed[IKE_MAX_DIGEST_SIZE];
-   uint8_t buffer[2 * IKE_MAX_NONCE_SIZE + 2 * IKE_SPI_SIZE];
+   DataFrag dataFrags[4];
 
    //Point to the IKE context
    context = sa->context;
@@ -80,6 +80,7 @@ error_t ikeGenerateSaKeyMaterial(IkeSaEntry *sa, IkeSaEntry *oldSa)
       //When an authenticated encryption algorithm is selected as the encryption
       //algorithm for any IKE SA, an integrity algorithm must not be selected
       //for that SA (refer to RFC 5282, section 8)
+      sa->authMacAlgo = MAC_ALGO_NONE;
       sa->authHashAlgo = NULL;
       sa->authCipherAlgo = NULL;
    }
@@ -116,31 +117,26 @@ error_t ikeGenerateSaKeyMaterial(IkeSaEntry *sa, IkeSaEntry *oldSa)
       TRACE_DEBUG("  SK_d (old):\r\n");
       TRACE_DEBUG_ARRAY("    ", oldSa->skd, oldSa->prfKeyLen);
 
-      //Concatenate Ni and Nr
-      osMemcpy(buffer, sa->initiatorNonce, sa->initiatorNonceLen);
-      bufferLen = sa->initiatorNonceLen;
-      osMemcpy(buffer + bufferLen, sa->responderNonce, sa->responderNonceLen);
-      bufferLen += sa->responderNonceLen;
-
-      //SKEYSEED for the new IKE SA is computed using SK_d from the existing
-      //IKE SA (refer to RFC 7296, section 2.18)
-      error = ikeInitPrf(oldSa, oldSa->skd, oldSa->prfKeyLen);
-      //Any error to report?
-      if(error)
-         return error;
+      //Concatenate g^ir (new), Ni and Nr
+      dataFrags[0].buffer = sa->sharedSecret;
+      dataFrags[0].length = sa->sharedSecretLen;
+      dataFrags[1].buffer = sa->initiatorNonce;
+      dataFrags[1].length = sa->initiatorNonceLen;
+      dataFrags[2].buffer = sa->responderNonce;
+      dataFrags[2].length = sa->responderNonceLen;
 
       //Calculate SKEYSEED = prf(SK_d (old), g^ir (new) | Ni | Nr)
-      ikeUpdatePrf(oldSa, sa->sharedSecret, sa->sharedSecretLen);
-      ikeUpdatePrf(oldSa, buffer, bufferLen);
-
-      //Finalize PRF calculation
-      error = ikeFinalizePrf(oldSa, skeyseed);
+      error = ikePrfEx(oldSa->prfMacAlgo, oldSa->prfHashAlgo, oldSa->prfCipherAlgo,
+         oldSa->skd, oldSa->prfKeyLen, dataFrags, 3, skeyseed);
       //Any error to report?
       if(error)
          return error;
    }
    else
    {
+      size_t bufferLen;
+      uint8_t buffer[2 * IKE_MAX_NONCE_SIZE];
+
       //For historical backward-compatibility reasons, there are two PRFs that
       //are treated specially in this calculation
       if(sa->prfAlgoId == IKE_TRANSFORM_ID_PRF_AES128_XCBC ||
@@ -164,31 +160,36 @@ error_t ikeGenerateSaKeyMaterial(IkeSaEntry *sa, IkeSaEntry *oldSa)
       }
 
       //Each party generates a quantity called SKEYSEED = prf(Ni | Nr, g^ir)
-      error = ikeComputePrf(sa, buffer, bufferLen, sa->sharedSecret,
-         sa->sharedSecretLen, skeyseed);
+      error = ikePrf(sa->prfMacAlgo, sa->prfHashAlgo, sa->prfCipherAlgo,
+         buffer, bufferLen, sa->sharedSecret, sa->sharedSecretLen, skeyseed);
       //Any error to report?
       if(error)
          return error;
    }
+
+   //Any shared secret derived from key establishment must be destroyed
+   //immediately after its use (refer to RFC 9206, section 10)
+   osMemset(sa->sharedSecret, 0, IKE_MAX_SHARED_SECRET_LEN);
+   sa->sharedSecretLen = 0;
 
    //Debug message
    TRACE_DEBUG("  SKEYSEED:\r\n");
    TRACE_DEBUG_ARRAY("    ", skeyseed, sa->prfKeyLen);
 
    //Concatenate Ni, Nr, SPIi and SPIr
-   osMemcpy(buffer, sa->initiatorNonce, sa->initiatorNonceLen);
-   bufferLen = sa->initiatorNonceLen;
-   osMemcpy(buffer + bufferLen, sa->responderNonce, sa->responderNonceLen);
-   bufferLen += sa->responderNonceLen;
-   osMemcpy(buffer + bufferLen, sa->initiatorSpi, IKE_SPI_SIZE);
-   bufferLen += IKE_SPI_SIZE;
-   osMemcpy(buffer + bufferLen, sa->responderSpi, IKE_SPI_SIZE);
-   bufferLen += IKE_SPI_SIZE;
+   dataFrags[0].buffer = sa->initiatorNonce;
+   dataFrags[0].length = sa->initiatorNonceLen;
+   dataFrags[1].buffer = sa->responderNonce;
+   dataFrags[1].length = sa->responderNonceLen;
+   dataFrags[2].buffer = sa->initiatorSpi;
+   dataFrags[2].length = IKE_SPI_SIZE;
+   dataFrags[3].buffer = sa->responderSpi;
+   dataFrags[3].length = IKE_SPI_SIZE;
 
    //SKEYSEED is used to calculate seven other secrets (refer to RFC 7296,
    //section 2.14)
-   error = ikeComputePrfPlus(sa, skeyseed, sa->prfKeyLen, buffer, bufferLen,
-      sa->keyMaterial, keyMaterialLen);
+   error = ikePrfPlusEx(sa->prfMacAlgo, sa->prfHashAlgo, sa->prfCipherAlgo,
+      skeyseed, sa->prfKeyLen, dataFrags, 4, sa->keyMaterial, keyMaterialLen);
    //Any error to report?
    if(error)
       return error;
@@ -261,10 +262,10 @@ error_t ikeGenerateSaKeyMaterial(IkeSaEntry *sa, IkeSaEntry *oldSa)
 error_t ikeGenerateChildSaKeyMaterial(IkeChildSaEntry *childSa)
 {
    error_t error;
-   size_t bufferLen;
+   uint_t n;
    size_t keyMaterialLen;
-   uint8_t buffer[2 * IKE_MAX_NONCE_SIZE];
    IkeSaEntry *sa;
+   DataFrag dataFrags[3];
 
    //Point to the IKE SA
    sa = childSa->sa;
@@ -304,6 +305,7 @@ error_t ikeGenerateChildSaKeyMaterial(IkeChildSaEntry *childSa)
          //When an authenticated encryption algorithm is selected as the
          //encryption algorithm for any IKE SA, an integrity algorithm must
          //not be selected for that SA (refer to RFC 5282, section 8)
+         childSa->authMacAlgo = MAC_ALGO_NONE;
          childSa->authHashAlgo = NULL;
          childSa->authCipherAlgo = NULL;
       }
@@ -341,20 +343,42 @@ error_t ikeGenerateChildSaKeyMaterial(IkeChildSaEntry *childSa)
    TRACE_DEBUG("  Nonce (responder):\r\n");
    TRACE_DEBUG_ARRAY("    ", childSa->responderNonce, childSa->responderNonceLen);
 
+   //Concatenate g^ir (new), Ni and Nr
+   n = 0;
+
+#if (IKE_CHILD_SA_PFS_SUPPORT == ENABLED)
+   //Perfect forward secrecy?
+   if(childSa->pfs)
+   {
+      //g^ir (new) is the shared secret from the ephemeral Diffie-Hellman
+      //exchange of this CREATE_CHILD_SA exchange
+      dataFrags[n].buffer = childSa->sharedSecret;
+      dataFrags[n++].length = childSa->sharedSecretLen;
+   }
+#endif
+
    //Ni and Nr are the nonces from the IKE_SA_INIT exchange if this request is
    //the first Child SA created or the fresh Ni and Nr from the CREATE_CHILD_SA
    //exchange if this is a subsequent creation (refer to RFC 7296, section 2.17)
-   osMemcpy(buffer, childSa->initiatorNonce, childSa->initiatorNonceLen);
-   bufferLen = childSa->initiatorNonceLen;
-   osMemcpy(buffer + bufferLen, childSa->responderNonce, childSa->responderNonceLen);
-   bufferLen += childSa->responderNonceLen;
+   dataFrags[n].buffer = childSa->initiatorNonce;
+   dataFrags[n++].length = childSa->initiatorNonceLen;
+   dataFrags[n].buffer = childSa->responderNonce;
+   dataFrags[n++].length = childSa->responderNonceLen;
 
-   //Calculate KEYMAT = prf+(SK_d, Ni | Nr)
-   error = ikeComputePrfPlus(childSa->sa, sa->skd, sa->prfKeyLen, buffer,
-      bufferLen, childSa->keyMaterial, keyMaterialLen);
+   //Calculate KEYMAT = prf+(SK_d, g^ir (new) | Ni | Nr)
+   error = ikePrfPlusEx(sa->prfMacAlgo, sa->prfHashAlgo, sa->prfCipherAlgo,
+      sa->skd, sa->prfKeyLen, dataFrags, n, childSa->keyMaterial,
+      keyMaterialLen);
    //Any error to report?
    if(error)
       return error;
+
+#if (IKE_CHILD_SA_PFS_SUPPORT == ENABLED)
+   //Any shared secret derived from key establishment must be destroyed
+   //immediately after its use (refer to RFC 9206, section 10)
+   osMemset(childSa->sharedSecret, 0, IKE_MAX_SHARED_SECRET_LEN);
+   childSa->sharedSecretLen = 0;
+#endif
 
    //Debug message
    TRACE_DEBUG("  Keying material:\r\n");
@@ -404,345 +428,6 @@ error_t ikeGenerateChildSaKeyMaterial(IkeChildSaEntry *childSa)
 
    //Successful processing
    return NO_ERROR;
-}
-
-
-/**
- * @brief Pseudorandom function (prf function)
- * @param[in] sa Pointer to the IKE SA
- * @param[in] k Pointer to the key
- * @param[in] kLen Length of the key, in bytes
- * @param[in] s Pointer to the data
- * @param[in] sLen Length of the data, in bytes
- * @param[in] output Pseudorandom output
- * @return Error code
- **/
-
-error_t ikeComputePrf(IkeSaEntry *sa, const uint8_t *k, size_t kLen,
-   const void *s, size_t sLen, uint8_t *output)
-{
-   error_t error;
-
-   //Initialize PRF calculation
-   error = ikeInitPrf(sa, k, kLen);
-
-   //Check status code
-   if(!error)
-   {
-      //Update PRF calculation
-      ikeUpdatePrf(sa, s, sLen);
-
-      //Finalize PRF calculation
-      error = ikeFinalizePrf(sa, output);
-   }
-
-   //Return status code
-   return error;
-}
-
-
-/**
- * @brief Function that outputs a pseudorandom stream (prf+ function)
- * @param[in] sa Pointer to the IKE SA
- * @param[in] k Pointer to the key
- * @param[in] kLen Length of the key, in bytes
- * @param[in] s Pointer to the data
- * @param[in] sLen Length of the data, in bytes
- * @param[out] output Pseudorandom output stream
- * @param[in] outputLen Desired length of the pseudorandom output stream
- * @return Error code
- **/
-
-error_t ikeComputePrfPlus(IkeSaEntry *sa, const uint8_t *k, size_t kLen,
-   const uint8_t *s, size_t sLen, uint8_t *output, size_t outputLen)
-{
-   error_t error;
-
-   //Initialize status code
-   error = NO_ERROR;
-
-   {
-      size_t n;
-      uint8_t c;
-      uint8_t t[IKE_MAX_DIGEST_SIZE];
-
-      //Keying material will always be derived as the output of the negotiated
-      //PRF algorithm.  Since the amount of keying material needed may be
-      //greater than the size of the output of the PRF, the PRF is used
-      //iteratively (refer to RFC 7296, section 2.13)
-      for(c = 1; outputLen > 0; c++)
-      {
-         //Initialize PRF calculation
-         error = ikeInitPrf(sa, k, kLen);
-         //Any error to report?
-         if(error)
-            break;
-
-         //Digest T(n-1)
-         if(c > 1)
-         {
-            ikeUpdatePrf(sa, t, sa->prfKeyLen);
-         }
-
-         //Compute T(n) = prf(K, T(n-1) | S | c)
-         ikeUpdatePrf(sa, s, sLen);
-         ikeUpdatePrf(sa, &c, sizeof(uint8_t));
-
-         //Finalize PRF calculation
-         error = ikeFinalizePrf(sa, t);
-         //Any error to report?
-         if(error)
-            break;
-
-         //Calculate the number of bytes to copy
-         n = MIN(outputLen, sa->prfKeyLen);
-         //Copy the output of the PRF
-         osMemcpy(output, t, n);
-
-         //This process is repeated until enough key material is available
-         output += n;
-         outputLen -= n;
-      }
-   }
-
-   //Return status code
-   return error;
-}
-
-
-/**
- * @brief Initialize PRF calculation
- * @param[in] sa Pointer to the IKE SA
- * @param[in] vk Pointer to the variable-length key
- * @param[in] vkLen Length of the key, in bytes
- * @return Error code
- **/
-
-error_t ikeInitPrf(IkeSaEntry *sa, const uint8_t *vk, size_t vkLen)
-{
-   error_t error;
-
-   //Initialize status code
-   error = NO_ERROR;
-
-#if (IKE_CMAC_PRF_SUPPORT == ENABLED)
-   //CMAC PRF algorithm?
-   if(sa->prfAlgoId == IKE_TRANSFORM_ID_PRF_AES128_CMAC &&
-      sa->prfCipherAlgo != NULL)
-   {
-      CmacContext *cmacContext;
-      uint8_t k[16];
-
-      //Point to the CMAC context
-      cmacContext = &sa->context->cmacContext;
-
-      //Derive the 128-bit key K from the variable-length key VK
-      if(vkLen == 16)
-      {
-         //If the key VK is exactly 128 bits, then we use it as-is
-         osMemcpy(k, vk, vkLen);
-      }
-      else
-      {
-         //If the key VK is longer or shorter than 128 bits, then we derive the
-         //key K by applying the AES-CMAC algorithm using the 128-bit all-zero
-         //string as the key and VK as the input message (refer to RFC 4615,
-         //section 3)
-         osMemset(k, 0, 16);
-
-         //Initialize CMAC calculation
-         error = cmacInit(cmacContext, sa->prfCipherAlgo, k, 16);
-
-         //Check status code
-         if(!error)
-         {
-            //Compute K = AES-CMAC(0^128, VK, VKlen)
-            cmacUpdate(cmacContext, vk, vkLen);
-
-            //Derive the 128-bit key K
-            error = cmacFinal(cmacContext, k, 16);
-         }
-      }
-
-      //Check status code
-      if(!error)
-      {
-         //We apply the AES-CMAC algorithm using K as the key
-         error = cmacInit(cmacContext, sa->prfCipherAlgo, k, 16);
-      }
-   }
-   else
-#endif
-#if (IKE_HMAC_PRF_SUPPORT == ENABLED)
-   //HMAC PRF algorithm?
-   if(sa->prfHashAlgo != NULL)
-   {
-      //Initialize HMAC calculation
-      error = hmacInit(&sa->context->hmacContext, sa->prfHashAlgo, vk, vkLen);
-   }
-   else
-#endif
-#if (IKE_XCBC_MAC_PRF_SUPPORT == ENABLED)
-   //XCBC-MAC PRF algorithm?
-   if(sa->prfAlgoId == IKE_TRANSFORM_ID_PRF_AES128_XCBC &&
-      sa->prfCipherAlgo != NULL)
-   {
-      XcbcMacContext *xcbcMacContext;
-      uint8_t k[16];
-
-      //Point to the XCBC-MAC context
-      xcbcMacContext = &sa->context->xcbcMacContext;
-
-      //Derive the 128-bit key K from the variable-length key VK
-      if(vkLen == 16)
-      {
-         //If the key is exactly 128 bits long, use it as-is
-         osMemcpy(k, vk, vkLen);
-      }
-      else if(vkLen < 16)
-      {
-         //If the key has fewer than 128 bits, lengthen it to exactly 128 bits
-         //by padding it on the right with zero bits
-         osMemcpy(k, vk, vkLen);
-         osMemset(k + vkLen, 0, 16 - vkLen);
-      }
-      else
-      {
-         //If the key is 129 bits or longer, shorten it to exactly 128 bits
-         //by performing the steps in AES-XCBC-PRF-128 (refer to RFC 4434,
-         //section 2)
-         osMemset(k, 0, 16);
-
-         //The key is 128 zero bits
-         error = xcbcMacInit(xcbcMacContext, sa->prfCipherAlgo, k, 16);
-
-         //Check status code
-         if(!error)
-         {
-            //The message is the too-long current key
-            xcbcMacUpdate(xcbcMacContext, vk, vkLen);
-
-            //Derive the 128-bit key K
-            error = xcbcMacFinal(xcbcMacContext, k, 16);
-         }
-      }
-
-      //Check status code
-      if(!error)
-      {
-         //We apply the XCBC-MAC algorithm using K as the key
-         error = xcbcMacInit(xcbcMacContext, sa->prfCipherAlgo, k, 16);
-      }
-   }
-   else
-#endif
-   //Unknown PRF algorithm?
-   {
-      //Report an error
-      error = ERROR_FAILURE;
-   }
-
-   //Return status code
-   return error;
-}
-
-
-/**
- * @brief Update PRF calculation
- * @param[in] sa Pointer to the IKE SA
- * @param[in] s Pointer to the data
- * @param[in] sLen Length of the data, in bytes
- **/
-
-void ikeUpdatePrf(IkeSaEntry *sa, const uint8_t *s, size_t sLen)
-{
-#if (IKE_CMAC_PRF_SUPPORT == ENABLED)
-   //CMAC PRF algorithm?
-   if(sa->prfAlgoId == IKE_TRANSFORM_ID_PRF_AES128_CMAC &&
-      sa->prfCipherAlgo != NULL)
-   {
-      //Update CMAC calculation
-      cmacUpdate(&sa->context->cmacContext, s, sLen);
-   }
-   else
-#endif
-#if (IKE_HMAC_PRF_SUPPORT == ENABLED)
-   //HMAC PRF algorithm?
-   if(sa->prfHashAlgo != NULL)
-   {
-      //Update HMAC calculation
-      hmacUpdate(&sa->context->hmacContext, s, sLen);
-   }
-   else
-#endif
-#if (IKE_XCBC_MAC_PRF_SUPPORT == ENABLED)
-   //XCBC-MAC PRF algorithm?
-   if(sa->prfAlgoId == IKE_TRANSFORM_ID_PRF_AES128_XCBC &&
-      sa->prfCipherAlgo != NULL)
-   {
-      //Update XCBC-MAC calculation
-      xcbcMacUpdate(&sa->context->xcbcMacContext, s, sLen);
-   }
-   else
-#endif
-   //Unknown PRF algorithm?
-   {
-      //Just for sanity
-   }
-}
-
-
-/**
- * @brief Finalize PRF calculation
- * @param[in] sa Pointer to the IKE SA
- * @param[in] output Pseudorandom output
- * @return Error code
- **/
-
-error_t ikeFinalizePrf(IkeSaEntry *sa, uint8_t *output)
-{
-   error_t error;
-
-   //Initialize status code
-   error = NO_ERROR;
-
-#if (IKE_CMAC_PRF_SUPPORT == ENABLED)
-   //CMAC PRF algorithm?
-   if(sa->prfAlgoId == IKE_TRANSFORM_ID_PRF_AES128_CMAC &&
-      sa->prfCipherAlgo != NULL)
-   {
-      //Finalize CMAC calculation
-      error = cmacFinal(&sa->context->cmacContext, output, sa->prfKeyLen);
-   }
-   else
-#endif
-#if (IKE_HMAC_PRF_SUPPORT == ENABLED)
-   //HMAC PRF algorithm?
-   if(sa->prfHashAlgo != NULL)
-   {
-      //Finalize HMAC calculation
-      hmacFinal(&sa->context->hmacContext, output);
-   }
-   else
-#endif
-#if (IKE_XCBC_MAC_PRF_SUPPORT == ENABLED)
-   //XCBC-MAC PRF algorithm?
-   if(sa->prfAlgoId == IKE_TRANSFORM_ID_PRF_AES128_XCBC &&
-      sa->prfCipherAlgo != NULL)
-   {
-      //Finalize XCBC-MAC calculation
-      error = xcbcMacFinal(&sa->context->xcbcMacContext, output, sa->prfKeyLen);
-   }
-   else
-#endif
-   //Unknown PRF algorithm?
-   {
-      //Report an error
-      error = ERROR_FAILURE;
-   }
-
-   //Return status code
-   return error;
 }
 
 #endif

@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 //Switch to the appropriate trace level
@@ -290,6 +290,18 @@ static const IkeParamName ikeAuthMethodList[] =
    {IKE_AUTH_METHOD_GSPAM,             "Generic Secure Password Authentication Method"},
    {IKE_AUTH_METHOD_NULL,              "NULL Authentication"},
    {IKE_AUTH_METHOD_DIGITAL_SIGN,      "Digital Signature"}
+};
+
+//Hash algorithms
+static const IkeParamName ikeHashAlgoList[] =
+{
+   {IKE_HASH_ALGO_SHA1,         "SHA-1"},
+   {IKE_HASH_ALGO_SHA256,       "SHA-256"},
+   {IKE_HASH_ALGO_SHA384,       "SHA-384"},
+   {IKE_HASH_ALGO_SHA512,       "SHA-512"},
+   {IKE_HASH_ALGO_IDENTITY,     "Identity"},
+   {IKE_HASH_ALGO_STREEBOG_256, "STREEBOG_256"},
+   {IKE_HASH_ALGO_STREEBOG_512, "STREEBOG_512"}
 };
 
 //Notify message types
@@ -895,6 +907,18 @@ void ikeDumpTransform(const IkeTransform *transform, size_t length)
       algoName = ikeGetParamName(transformId, ikeEsnList,
          arraysize(ikeEsnList));
    }
+   else if(transform->transformType == IKE_TRANSFORM_TYPE_ADDKE1 ||
+      transform->transformType == IKE_TRANSFORM_TYPE_ADDKE2 ||
+      transform->transformType == IKE_TRANSFORM_TYPE_ADDKE3 ||
+      transform->transformType == IKE_TRANSFORM_TYPE_ADDKE4 ||
+      transform->transformType == IKE_TRANSFORM_TYPE_ADDKE5 ||
+      transform->transformType == IKE_TRANSFORM_TYPE_ADDKE6 ||
+      transform->transformType == IKE_TRANSFORM_TYPE_ADDKE7)
+   {
+      //Transform type 6-12 (additional key exchange)
+      algoName = ikeGetParamName(transformId, ikeKeAlgoList,
+         arraysize(ikeKeAlgoList));
+   }
    else
    {
       //Unknown transform
@@ -1241,6 +1265,7 @@ void ikeDumpNoncePayload(const IkeNoncePayload *payload, size_t length)
 void ikeDumpNotifyPayload(const IkeNotifyPayload *payload, size_t length)
 {
    size_t n;
+   uint16_t notifyMsgType;
    const uint8_t *p;
    const char_t *protocolIdName;
    const char_t *notifyMsgName;
@@ -1257,9 +1282,12 @@ void ikeDumpNotifyPayload(const IkeNotifyPayload *payload, size_t length)
    protocolIdName = ikeGetParamName(payload->protocolId,
       ikeProtocolIdList, arraysize(ikeProtocolIdList));
 
+   //The Notify Message Type field specifies the type of notification message
+   notifyMsgType = ntohs(payload->notifyMsgType);
+
    //Convert the Notify Message Type to string representation
-   notifyMsgName = ikeGetParamName(ntohs(payload->notifyMsgType),
-      ikeNotifyMsgTypeList, arraysize(ikeNotifyMsgTypeList));
+   notifyMsgName = ikeGetParamName(notifyMsgType, ikeNotifyMsgTypeList,
+      arraysize(ikeNotifyMsgTypeList));
 
    //Dump Notify payload
    TRACE_DEBUG("    Protocol ID = %" PRIu8 " (%s)\r\n",
@@ -1282,12 +1310,90 @@ void ikeDumpNotifyPayload(const IkeNotifyPayload *payload, size_t length)
    p = payload->spi + payload->spiSize;
    n = length - sizeof(IkeNotifyPayload) - payload->spiSize;
 
-   //Dump Notification Data field
+   //Debug message
    TRACE_DEBUG("    Notification Data (%" PRIuSIZE " bytes)\r\n", n);
 
-   if(n > 0)
+   //Check notification message type
+   if(notifyMsgType == IKE_NOTIFY_MSG_TYPE_INVALID_KE_PAYLOAD)
    {
-      TRACE_DEBUG_ARRAY("      ", p, n);
+      //The INVALID_KE_PAYLOAD notification indicates the selected group
+      ikeDumpInvalidKePayloadNotification(p, n);
+   }
+   else if(notifyMsgType == IKE_NOTIFY_MSG_TYPE_SIGNATURE_HASH_ALGORITHMS)
+   {
+      //The IKE_NOTIFY_MSG_TYPE_SIGNATURE_HASH_ALGORITHMS notification indicates
+      //the list of hash functions supported by the sending peer
+      ikeDumpSignHashAlgosNotification(p, n);
+   }
+   else
+   {
+      //Dump Notification Data field
+      if(n > 0)
+      {
+         TRACE_DEBUG_ARRAY("      ", p, n);
+      }
+   }
+}
+
+
+/**
+ * @brief Dump INVALID_KE_PAYLOAD notification data
+ * @param[in] data Pointer to the notification data
+ * @param[in] length Length of the notification data, in bytes
+ **/
+
+void ikeDumpInvalidKePayloadNotification(const uint8_t *data, size_t length)
+{
+   uint16_t groupNum;
+   const char_t *groupName;
+
+   //Malformed notification data?
+   if(length < sizeof(uint16_t))
+      return;
+
+   //The INVALID_KE_PAYLOAD notification indicates the selected group
+   groupNum = LOAD16BE(data);
+
+   //Convert the group number to string representation
+   groupName = ikeGetParamName(groupNum, ikeKeAlgoList,
+      arraysize(ikeKeAlgoList));
+
+   //Dump group number
+   TRACE_DEBUG("      Selected Group = %" PRIu16 " (%s)\r\n", groupNum,
+      groupName);
+}
+
+
+/**
+ * @brief Dump IKE_NOTIFY_MSG_TYPE_SIGNATURE_HASH_ALGORITHMS notification data
+ * @param[in] data Pointer to the notification data
+ * @param[in] length Length of the notification data, in bytes
+ **/
+
+void ikeDumpSignHashAlgosNotification(const uint8_t *data, size_t length)
+{
+   uint_t i;
+   uint16_t hashAlgoId;
+   const char_t *hashAlgoName;
+
+   //Malformed notification data?
+   if((length % sizeof(uint16_t)) != 0)
+      return;
+
+   //The IKE_NOTIFY_MSG_TYPE_SIGNATURE_HASH_ALGORITHMS notification indicates
+   //the list of hash functions supported by the sending peer
+   for(i = 0; i < length; i += sizeof(uint16_t))
+   {
+      //Get the current 16-bit hash algorithm identifier
+      hashAlgoId = LOAD16BE(data + i);
+
+      //Convert the hash algorithm identifier to string representation
+      hashAlgoName = ikeGetParamName(hashAlgoId, ikeHashAlgoList,
+         arraysize(ikeHashAlgoList));
+
+      //Dump hash algorithm identifier
+      TRACE_DEBUG("      Hash Algorithm ID = %" PRIu16 " (%s)\r\n", hashAlgoId,
+         hashAlgoName);
    }
 }
 

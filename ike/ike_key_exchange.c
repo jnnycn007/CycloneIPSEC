@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 //Switch to the appropriate trace level
@@ -43,98 +43,97 @@
 
 
 /**
- * @brief Initialize Diffie-Hellman context
- * @param[in] sa Pointer to the IKE SA
+ * @brief Initialize key exchange context
+ * @param[in] keContext Pointer to the key exchange context
  **/
 
-void ikeInitDhContext(IkeSaEntry *sa)
+void ikeInitKeContext(IkeKeContext *keContext)
 {
 #if (IKE_DH_KE_SUPPORT == ENABLED)
    //Initialize Diffie-Hellman context
-   dhInit(&sa->dhContext);
+   dhInit(&keContext->dhContext);
 #endif
 
 #if (IKE_ECDH_KE_SUPPORT == ENABLED)
    //Initialize ECDH context
-   ecdhInit(&sa->ecdhContext);
+   ecdhInit(&keContext->ecdhContext);
 #endif
 }
 
 
 /**
- * @brief Release Diffie-Hellman context
- * @param[in] sa Pointer to the IKE SA
+ * @brief Release key exchange context
+ * @param[in] keContext Pointer to the key exchange context
  **/
 
-void ikeFreeDhContext(IkeSaEntry *sa)
+void ikeFreeKeContext(IkeKeContext *keContext)
 {
 #if (IKE_DH_KE_SUPPORT == ENABLED)
    //Release Diffie-Hellman context
-   dhFree(&sa->dhContext);
+   dhFree(&keContext->dhContext);
 #endif
 
 #if (IKE_ECDH_KE_SUPPORT == ENABLED)
    //Release ECDH context
-   ecdhFree(&sa->ecdhContext);
+   ecdhFree(&keContext->ecdhContext);
 #endif
 }
 
 
 /**
- * @brief Diffie-Hellman key pair generation
- * @param[in] sa Pointer to the IKE SA
+ * @brief Key pair generation
+ * @param[in] keContext Pointer to the key exchange context
+ * @param[in] prngAlgo PRNG algorithm
+ * @param[in] prngContext Pointer to the PRNG context
  * @return Error code
  **/
 
-error_t ikeGenerateDhKeyPair(IkeSaEntry *sa)
+error_t ikeGenerateKeyPair(IkeKeContext *keContext, const PrngAlgo *prngAlgo,
+   void *prngContext)
 {
    error_t error;
-   IkeContext *context;
-
-   //Point to the IKE context
-   context = sa->context;
 
    //Debug message
    TRACE_INFO("Generating Diffie-Hellman key pair...\r\n");
 
 #if (IKE_DH_KE_SUPPORT == ENABLED)
    //Diffie-Hellman key exchange algorithm?
-   if(ikeIsDhKeyExchangeAlgo(sa->groupNum))
+   if(ikeIsDhKeyExchangeAlgo(keContext->groupNum))
    {
       //Load Diffie-Hellman parameters
-      error = ikeLoadDhParams(&sa->dhContext.params, sa->groupNum);
+      error = ikeLoadDhParams(&keContext->dhContext.params, keContext->groupNum);
 
       //Check status code
       if(!error)
       {
          //Generate an ephemeral key pair
-         error = dhGenerateKeyPair(&sa->dhContext, context->prngAlgo,
-            context->prngContext);
+         error = dhGenerateKeyPair(&keContext->dhContext, prngAlgo,
+            prngContext);
       }
    }
    else
 #endif
 #if (IKE_ECDH_KE_SUPPORT == ENABLED)
    //ECDH key exchange algorithm?
-   if(ikeIsEcdhKeyExchangeAlgo(sa->groupNum))
+   if(ikeIsEcdhKeyExchangeAlgo(keContext->groupNum))
    {
       const EcCurve *curve;
 
       //Get the elliptic curve that matches the specified group number
-      curve = ikeGetEcdhCurve(sa->groupNum);
+      curve = ikeGetEcdhCurve(keContext->groupNum);
 
       //Valid elliptic curve?
       if(curve != NULL)
       {
          //Save elliptic curve parameters
-         error = ecdhSetCurve(&sa->ecdhContext, curve);
+         error = ecdhSetCurve(&keContext->ecdhContext, curve);
 
          //Check status code
          if(!error)
          {
             //Generate an ephemeral key pair
-            error = ecdhGenerateKeyPair(&sa->ecdhContext, context->prngAlgo,
-               context->prngContext);
+            error = ecdhGenerateKeyPair(&keContext->ecdhContext, prngAlgo,
+               prngContext);
          }
       }
       else
@@ -157,37 +156,40 @@ error_t ikeGenerateDhKeyPair(IkeSaEntry *sa)
 
 
 /**
- * @brief Compute Diffie-Hellman shared secret
- * @param[in] sa Pointer to the IKE SA
+ * @brief Compute shared secret
+ * @param[in] keContext Pointer to the key exchange context
+ * @param[out] output Buffer where to store the shared secret
+ * @param[out] outputLen Length of the resulting shared secret
  * @return Error code
  **/
 
-error_t ikeComputeDhSharedSecret(IkeSaEntry *sa)
+error_t ikeComputeSharedSecret(IkeKeContext *keContext, uint8_t *output,
+   size_t *outputLen)
 {
    error_t error;
 
    //Debug message
-   TRACE_INFO("Computing Diffie-Hellman shared secret...\r\n");
+   TRACE_INFO("Computing shared secret...\r\n");
 
 #if (IKE_DH_KE_SUPPORT == ENABLED)
    //Diffie-Hellman key exchange algorithm?
-   if(ikeIsDhKeyExchangeAlgo(sa->groupNum))
+   if(ikeIsDhKeyExchangeAlgo(keContext->groupNum))
    {
       //Let g^ir be the shared secret from the ephemeral Diffie-Hellman
       //exchange
-      error = dhComputeSharedSecret(&sa->dhContext, sa->sharedSecret,
-         IKE_MAX_SHARED_SECRET_LEN, &sa->sharedSecretLen);
+      error = dhComputeSharedSecret(&keContext->dhContext, output,
+         IKE_MAX_SHARED_SECRET_LEN, outputLen);
    }
    else
 #endif
 #if (IKE_ECDH_KE_SUPPORT == ENABLED)
    //ECDH key exchange algorithm?
-   if(ikeIsEcdhKeyExchangeAlgo(sa->groupNum))
+   if(ikeIsEcdhKeyExchangeAlgo(keContext->groupNum))
    {
       //The Diffie-Hellman shared secret value consists of the x value of the
       //Diffie-Hellman common value (refer to RFC 5903, section 7)
-      error = ecdhComputeSharedSecret(&sa->ecdhContext, sa->sharedSecret,
-         IKE_MAX_SHARED_SECRET_LEN, &sa->sharedSecretLen);
+      error = ecdhComputeSharedSecret(&keContext->ecdhContext, output,
+         IKE_MAX_SHARED_SECRET_LEN, outputLen);
    }
    else
 #endif
@@ -203,37 +205,38 @@ error_t ikeComputeDhSharedSecret(IkeSaEntry *sa)
 
 
 /**
- * @brief Format Diffie-Hellman public key
- * @param[in] sa Pointer to the IKE SA
- * @param[out] p Buffer where to format the Diffie-Hellman public key
+ * @brief Format public key
+ * @param[in] keContext Pointer to the key exchange context
+ * @param[out] p Buffer where to format the public key
  * @param[out] written Total number of bytes that have been written
  * @return Error code
  **/
 
-error_t ikeFormatDhPublicKey(IkeSaEntry *sa, uint8_t *p, size_t *written)
+error_t ikeFormatPublicKey(IkeKeContext *keContext, uint8_t *p,
+   size_t *written)
 {
    error_t error;
 
 #if (IKE_DH_KE_SUPPORT == ENABLED)
    //Diffie-Hellman key exchange algorithm?
-   if(ikeIsDhKeyExchangeAlgo(sa->groupNum))
+   if(ikeIsDhKeyExchangeAlgo(keContext->groupNum))
    {
       //The length of the Diffie-Hellman public value for MODP groups must be
       //equal to the length of the prime modulus over which the exponentiation
       //was performed, prepending zero bits to the value if necessary (refer
       //to RFC 7296, section 3.4)
-      error = dhExportPublicKey(&sa->dhContext, p, written,
+      error = dhExportPublicKey(&keContext->dhContext, p, written,
          MPI_FORMAT_BIG_ENDIAN);
    }
    else
 #endif
 #if (IKE_ECDH_KE_SUPPORT == ENABLED)
    //ECDH key exchange algorithm?
-   if(ikeIsEcdhKeyExchangeAlgo(sa->groupNum))
+   if(ikeIsEcdhKeyExchangeAlgo(keContext->groupNum))
    {
       //The Diffie-Hellman public value is obtained by concatenating the x and
       //y values (refer to RFC 5903, section 7)
-      error = ecdhExportPublicKey(&sa->ecdhContext, p, written,
+      error = ecdhExportPublicKey(&keContext->ecdhContext, p, written,
          EC_PUBLIC_KEY_FORMAT_RAW);
    }
    else
@@ -250,25 +253,26 @@ error_t ikeFormatDhPublicKey(IkeSaEntry *sa, uint8_t *p, size_t *written)
 
 
 /**
- * @brief Parse peer's Diffie-Hellman public key
- * @param[in] sa Pointer to the IKE SA
- * @param[out] p Pointer the Diffie-Hellman public key
- * @param[out] length Length of the Diffie-Hellman public key, in bytes
+ * @brief Parse peer's public key
+ * @param[in] keContext Pointer to the key exchange context
+ * @param[out] p Pointer the public key
+ * @param[out] length Length of the public key, in bytes
  * @return Error code
  **/
 
-error_t ikeParseDhPublicKey(IkeSaEntry *sa, const uint8_t *p, size_t length)
+error_t ikeParsePublicKey(IkeKeContext *keContext, const uint8_t *p,
+   size_t length)
 {
    error_t error;
 
 #if (IKE_DH_KE_SUPPORT == ENABLED)
    //Diffie-Hellman key exchange algorithm?
-   if(ikeIsDhKeyExchangeAlgo(sa->groupNum))
+   if(ikeIsDhKeyExchangeAlgo(keContext->groupNum))
    {
       const IkeDhGroup *dhGroup;
 
       //Get the Diffie-Hellman group that matches the specified group number
-      dhGroup = ikeGetDhGroup(sa->groupNum);
+      dhGroup = ikeGetDhGroup(keContext->groupNum);
 
       //Valid Diffie-Hellman group?
       if(dhGroup != NULL)
@@ -280,13 +284,13 @@ error_t ikeParseDhPublicKey(IkeSaEntry *sa, const uint8_t *p, size_t length)
          if(length == dhGroup->pLen)
          {
             //Load Diffie-Hellman parameters
-            error = ikeLoadDhParams(&sa->dhContext.params, sa->groupNum);
+            error = ikeLoadDhParams(&keContext->dhContext.params, keContext->groupNum);
 
             //Check status code
             if(!error)
             {
                //Load peer's Diffie-Hellman public value
-               error = dhImportPeerPublicKey(&sa->dhContext, p, length,
+               error = dhImportPeerPublicKey(&keContext->dhContext, p, length,
                   MPI_FORMAT_BIG_ENDIAN);
             }
          }
@@ -306,26 +310,26 @@ error_t ikeParseDhPublicKey(IkeSaEntry *sa, const uint8_t *p, size_t length)
 #endif
 #if (IKE_ECDH_KE_SUPPORT == ENABLED)
    //ECDH key exchange algorithm?
-   if(ikeIsEcdhKeyExchangeAlgo(sa->groupNum))
+   if(ikeIsEcdhKeyExchangeAlgo(keContext->groupNum))
    {
       const EcCurve *curve;
 
       //Get the elliptic curve that matches the specified group number
-      curve = ikeGetEcdhCurve(sa->groupNum);
+      curve = ikeGetEcdhCurve(keContext->groupNum);
 
       //Valid elliptic curve?
       if(curve != NULL)
       {
          //Save elliptic curve parameters
-         error = ecdhSetCurve(&sa->ecdhContext, curve);
+         error = ecdhSetCurve(&keContext->ecdhContext, curve);
 
          //Check status code
          if(!error)
          {
             //In an ECP key exchange, the Diffie-Hellman public value passed in
-            //a KE payload consists of two components, x and y, corresponding to
-            //the coordinates of an elliptic curve point
-            error = ecdhImportPeerPublicKey(&sa->ecdhContext, p, length,
+            //a KE payload consists of two components, x and y, corresponding
+            //to the coordinates of an elliptic curve point
+            error = ecdhImportPeerPublicKey(&keContext->ecdhContext, p, length,
                EC_PUBLIC_KEY_FORMAT_RAW);
          }
       }

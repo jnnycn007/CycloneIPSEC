@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 #ifndef _AH_H
@@ -186,7 +186,12 @@ typedef __packed_struct
 #endif
 
 //AH related functions
-error_t ipv4ProcessAhHeader(NetInterface *interface,
+error_t ahProtectOutboundIpv4Packet(IpsecContext *context, IpsecSadEntry *sa,
+   NetInterface *interface, const Ipv4PseudoHeader *pseudoHeader,
+   uint16_t fragId, NetBuffer *buffer, size_t offset,
+   NetTxAncillary *ancillary);
+
+error_t ahProcessInboundIpv4Packet(NetInterface *interface,
    const Ipv4Header *ipv4Header, const NetBuffer *buffer, size_t offset,
    NetRxAncillary *ancillary);
 

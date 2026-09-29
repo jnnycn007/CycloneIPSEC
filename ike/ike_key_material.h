@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 #ifndef _IKE_KEY_MATERIAL_H
@@ -42,16 +42,6 @@ extern "C" {
 //IKE related functions
 error_t ikeGenerateSaKeyMaterial(IkeSaEntry *sa, IkeSaEntry *oldSa);
 error_t ikeGenerateChildSaKeyMaterial(IkeChildSaEntry *childSa);
-
-error_t ikeComputePrf(IkeSaEntry *sa, const uint8_t *k, size_t kLen,
-   const void *s, size_t sLen, uint8_t *output);
-
-error_t ikeComputePrfPlus(IkeSaEntry *sa, const uint8_t *k, size_t kLen,
-   const uint8_t *s, size_t sLen, uint8_t *output, size_t outputLen);
-
-error_t ikeInitPrf(IkeSaEntry *sa, const uint8_t *vk, size_t vkLen);
-void ikeUpdatePrf(IkeSaEntry *sa, const uint8_t *s, size_t sLen);
-error_t ikeFinalizePrf(IkeSaEntry *sa, uint8_t *output);
 
 //C++ guard
 #ifdef __cplusplus

@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 //Switch to the appropriate trace level
@@ -102,6 +102,7 @@ error_t ahSelectAuthAlgo(IkeChildSaEntry *childSa, uint16_t authAlgoId)
    //AES-CMAC-96 authentication algorithm?
    if(authAlgoId == IKE_TRANSFORM_ID_AUTH_AES_CMAC_96)
    {
+      childSa->authMacAlgo = MAC_ALGO_CMAC;
       childSa->authHashAlgo = NULL;
       childSa->authCipherAlgo = AES_CIPHER_ALGO;
       childSa->authKeyLen = 16;
@@ -113,6 +114,7 @@ error_t ahSelectAuthAlgo(IkeChildSaEntry *childSa, uint16_t authAlgoId)
    //HMAC-MD5-96 authentication algorithm?
    if(authAlgoId == IKE_TRANSFORM_ID_AUTH_HMAC_MD5_96)
    {
+      childSa->authMacAlgo = MAC_ALGO_HMAC;
       childSa->authHashAlgo = MD5_HASH_ALGO;
       childSa->authCipherAlgo = NULL;
       childSa->authKeyLen = MD5_DIGEST_SIZE;
@@ -124,6 +126,7 @@ error_t ahSelectAuthAlgo(IkeChildSaEntry *childSa, uint16_t authAlgoId)
    //HMAC-SHA1-96 authentication algorithm?
    if(authAlgoId == IKE_TRANSFORM_ID_AUTH_HMAC_SHA1_96)
    {
+      childSa->authMacAlgo = MAC_ALGO_HMAC;
       childSa->authHashAlgo = SHA1_HASH_ALGO;
       childSa->authCipherAlgo = NULL;
       childSa->authKeyLen = SHA1_DIGEST_SIZE;
@@ -135,6 +138,7 @@ error_t ahSelectAuthAlgo(IkeChildSaEntry *childSa, uint16_t authAlgoId)
    //HMAC-SHA256-128 authentication algorithm?
    if(authAlgoId == IKE_TRANSFORM_ID_AUTH_HMAC_SHA2_256_128)
    {
+      childSa->authMacAlgo = MAC_ALGO_HMAC;
       childSa->authHashAlgo = SHA256_HASH_ALGO;
       childSa->authCipherAlgo = NULL;
       childSa->authKeyLen = SHA256_DIGEST_SIZE;
@@ -146,6 +150,7 @@ error_t ahSelectAuthAlgo(IkeChildSaEntry *childSa, uint16_t authAlgoId)
    //HMAC-SHA384-192 authentication algorithm?
    if(authAlgoId == IKE_TRANSFORM_ID_AUTH_HMAC_SHA2_384_192)
    {
+      childSa->authMacAlgo = MAC_ALGO_HMAC;
       childSa->authHashAlgo = SHA384_HASH_ALGO;
       childSa->authCipherAlgo = NULL;
       childSa->authKeyLen = SHA384_DIGEST_SIZE;
@@ -157,6 +162,7 @@ error_t ahSelectAuthAlgo(IkeChildSaEntry *childSa, uint16_t authAlgoId)
    //HMAC-SHA512-256 authentication algorithm?
    if(authAlgoId == IKE_TRANSFORM_ID_AUTH_HMAC_SHA2_512_256)
    {
+      childSa->authMacAlgo = MAC_ALGO_HMAC;
       childSa->authHashAlgo = SHA512_HASH_ALGO;
       childSa->authCipherAlgo = NULL;
       childSa->authKeyLen = SHA512_DIGEST_SIZE;
@@ -177,19 +183,37 @@ error_t ahSelectAuthAlgo(IkeChildSaEntry *childSa, uint16_t authAlgoId)
 
 /**
  * @brief Add the supported AH transforms to the proposal
- * @param[in] context Pointer to the IKE context
+ * @param[in] childSa Pointer to the Child SA
  * @param[in,out] proposal Pointer to the Proposal substructure
  * @param[in,out] lastSubstruc Pointer to the Last Substruc field
  * @return Error code
  **/
 
-error_t ahAddSupportedTransforms(IkeContext *context, IkeProposal *proposal,
-   uint8_t **lastSubstruc)
+error_t ahAddSupportedTransforms(IkeChildSaEntry *childSa,
+   IkeProposal *proposal, uint8_t **lastSubstruc)
 {
    error_t error;
 
    //Add supported integrity transforms
-   error = ahAddSupportedAuthTransforms(context, proposal, lastSubstruc);
+   error = ahAddSupportedAuthTransforms(childSa, proposal, lastSubstruc);
+
+#if (IKE_CHILD_SA_PFS_SUPPORT == ENABLED)
+   //Check status code
+   if(!error)
+   {
+      //Although AH does not directly include a Diffie-Hellman exchange, a
+      //Diffie-Hellman group may be negotiated for the Child SA. This allows
+      //the peers to employ Diffie-Hellman in the CREATE_CHILD_SA exchange,
+      //providing perfect forward secrecy for the generated Child SA keys
+      //(refer to RFC 7296, section 3.3.2)
+      if(childSa->pfs)
+      {
+         //Add supported key exchange transforms
+         error = ikeAddSupportedKeTransforms(childSa->context, proposal,
+            lastSubstruc);
+      }
+   }
+#endif
 
    //Check status code
    if(!error)
@@ -197,7 +221,7 @@ error_t ahAddSupportedTransforms(IkeContext *context, IkeProposal *proposal,
       //An initiator who supports ESNs will usually include two ESN transforms,
       //with values "0" and "1", in its proposals (refer to RFC 7296,
       //section 3.3.2)
-      error = ahAddSupportedEsnTransforms(context, proposal, lastSubstruc);
+      error = ahAddSupportedEsnTransforms(childSa, proposal, lastSubstruc);
    }
 
    //Return status code
@@ -207,13 +231,13 @@ error_t ahAddSupportedTransforms(IkeContext *context, IkeProposal *proposal,
 
 /**
  * @brief Add the supported integrity transforms to the proposal
- * @param[in] context Pointer to the IKE context
+ * @param[in] childSa Pointer to the Child SA
  * @param[in,out] proposal Pointer to the Proposal substructure
  * @param[in,out] lastSubstruc Pointer to the Last Substruc field
  * @return Error code
  **/
 
-error_t ahAddSupportedAuthTransforms(IkeContext *context,
+error_t ahAddSupportedAuthTransforms(IkeChildSaEntry *childSa,
    IkeProposal *proposal, uint8_t **lastSubstruc)
 {
    error_t error;
@@ -237,13 +261,13 @@ error_t ahAddSupportedAuthTransforms(IkeContext *context,
 
 /**
  * @brief Add the supported ESN transforms to the proposal
- * @param[in] context Pointer to the IKE context
+ * @param[in] childSa Pointer to the Child SA
  * @param[in,out] proposal Pointer to the Proposal substructure
  * @param[in,out] lastSubstruc Pointer to the Last Substruc field
  * @return Error code
  **/
 
-error_t ahAddSupportedEsnTransforms(IkeContext *context,
+error_t ahAddSupportedEsnTransforms(IkeChildSaEntry *childSa,
    IkeProposal *proposal, uint8_t **lastSubstruc)
 {
    error_t error;
@@ -267,14 +291,14 @@ error_t ahAddSupportedEsnTransforms(IkeContext *context,
 
 /**
  * @brief Integrity transform negotiation
- * @param[in] context Pointer to the IKE context
+ * @param[in] childSa Pointer to the Child SA
  * @param[in] proposal Pointer to the Proposal substructure
  * @param[in] proposalLen Length of the Proposal substructure, in bytes
  * @return Selected integrity transform, if any
  **/
 
-uint16_t ahSelectAuthTransform(IkeContext *context, const IkeProposal *proposal,
-   size_t proposalLen)
+uint16_t ahSelectAuthTransform(IkeChildSaEntry *childSa,
+   const IkeProposal *proposal, size_t proposalLen)
 {
    //Select the integrity transform to use
    return ikeSelectTransform(IKE_TRANSFORM_TYPE_INTEG, ahSupportedAuthAlgos,
@@ -284,14 +308,14 @@ uint16_t ahSelectAuthTransform(IkeContext *context, const IkeProposal *proposal,
 
 /**
  * @brief ESN transform negotiation
- * @param[in] context Pointer to the IKE context
+ * @param[in] childSa Pointer to the Child SA
  * @param[in] proposal Pointer to the Proposal substructure
  * @param[in] proposalLen Length of the Proposal substructure, in bytes
  * @return Selected ESN transform, if any
  **/
 
-uint16_t ahSelectEsnTransform(IkeContext *context, const IkeProposal *proposal,
-   size_t proposalLen)
+uint16_t ahSelectEsnTransform(IkeChildSaEntry *childSa,
+   const IkeProposal *proposal, size_t proposalLen)
 {
    //Select the ESN transform to use
    return ikeSelectTransform(IKE_TRANSFORM_TYPE_ESN, ahSupportedEsnTranforms,
@@ -306,7 +330,8 @@ uint16_t ahSelectEsnTransform(IkeContext *context, const IkeProposal *proposal,
  * @return Error code
  **/
 
-error_t ahSelectSaProposal(IkeChildSaEntry *childSa, const IkeSaPayload *payload)
+error_t ahSelectSaProposal(IkeChildSaEntry *childSa,
+   const IkeSaPayload *payload)
 {
    error_t error;
    size_t n;
@@ -320,6 +345,9 @@ error_t ahSelectSaProposal(IkeChildSaEntry *childSa, const IkeSaPayload *payload
    childSa->encKeyLen = 0;
    childSa->authAlgoId = IKE_TRANSFORM_ID_INVALID;
    childSa->esn = IKE_TRANSFORM_ID_INVALID;
+#if (IKE_CHILD_SA_PFS_SUPPORT == ENABLED)
+   childSa->keContext.groupNum = IKE_TRANSFORM_ID_KE_NONE;
+#endif
 
    //Retrieve the length of the SA payload
    length = ntohs(payload->header.payloadLength);
@@ -370,16 +398,42 @@ error_t ahSelectSaProposal(IkeChildSaEntry *childSa, const IkeSaPayload *payload
          if(proposal->spiSize == IPSEC_SPI_SIZE &&
             osMemcmp(proposal->spi, IPSEC_INVALID_SPI, IPSEC_SPI_SIZE) != 0)
          {
+            //Initialize status code
+            error = NO_ERROR;
+
             //Integrity transform negotiation
-            childSa->authAlgoId = ahSelectAuthTransform(childSa->context,
-               proposal, n);
-
+            childSa->authAlgoId = ahSelectAuthTransform(childSa, proposal, n);
             //ESN transform negotiation
-            childSa->esn = ahSelectEsnTransform(childSa->context, proposal, n);
+            childSa->esn = ahSelectEsnTransform(childSa, proposal, n);
 
+            //Unacceptable proposal?
+            if(childSa->authAlgoId == IKE_TRANSFORM_ID_INVALID ||
+               childSa->esn == IKE_TRANSFORM_ID_INVALID)
+            {
+               error = ERROR_INVALID_PROPOSAL;
+            }
+
+#if (IKE_CHILD_SA_PFS_SUPPORT == ENABLED)
+            //Although AH does not directly include a Diffie-Hellman exchange,
+            //a Diffie-Hellman group may be negotiated for the Child SA. This
+            //allows the peers to employ Diffie-Hellman in the CREATE_CHILD_SA
+            //exchange, providing perfect forward secrecy for the generated
+            //Child SA keys (refer to RFC 7296, section 3.3.2)
+            if(childSa->pfs)
+            {
+               //Key exchange transform negotiation
+               childSa->keContext.groupNum = ikeSelectKeTransform(
+                  childSa->context, proposal, n);
+
+               //Unacceptable proposal?
+               if(childSa->keContext.groupNum == IKE_TRANSFORM_ID_KE_NONE)
+               {
+                  error = ERROR_INVALID_PROPOSAL;
+               }
+            }
+#endif
             //Valid proposal?
-            if(childSa->authAlgoId != IKE_TRANSFORM_ID_INVALID &&
-               childSa->esn != IKE_TRANSFORM_ID_INVALID)
+            if(!error)
             {
                //Select AH security protocol
                childSa->protocol = IPSEC_PROTOCOL_AH;
@@ -391,7 +445,6 @@ error_t ahSelectSaProposal(IkeChildSaEntry *childSa, const IkeSaPayload *payload
                osMemcpy(childSa->remoteSpi, proposal->spi, proposal->spiSize);
 
                //Successful negotiation
-               error = NO_ERROR;
                break;
             }
          }
@@ -414,7 +467,8 @@ error_t ahSelectSaProposal(IkeChildSaEntry *childSa, const IkeSaPayload *payload
  * @return Error code
  **/
 
-error_t ahCheckSaProposal(IkeChildSaEntry *childSa, const IkeSaPayload *payload)
+error_t ahCheckSaProposal(IkeChildSaEntry *childSa,
+   const IkeSaPayload *payload)
 {
    size_t n;
    size_t length;
@@ -481,9 +535,9 @@ error_t ahCheckSaProposal(IkeChildSaEntry *childSa, const IkeSaPayload *payload)
    }
 
    //Get the selected integrity transform
-   childSa->authAlgoId = ahSelectAuthTransform(childSa->context, proposal, n);
+   childSa->authAlgoId = ahSelectAuthTransform(childSa, proposal, n);
    //Get the selected ESN transform
-   childSa->esn = ahSelectEsnTransform(childSa->context, proposal, n);
+   childSa->esn = ahSelectEsnTransform(childSa, proposal, n);
 
    //The initiator of an exchange must check that the accepted offer is
    //consistent with one of its proposals, and if not must terminate the

@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 //Switch to the appropriate trace level
@@ -179,6 +179,21 @@ static const IkeEncAlgo espSupportedEncAlgos[] =
 #if (ESP_IDEA_SUPPORT == ENABLED && ESP_CBC_SUPPORT == ENABLED)
    {IKE_TRANSFORM_ID_ENCR_IDEA, 0},
 #endif
+#if (ESP_NULL_SUPPORT == ENABLED && ESP_GMAC_SUPPORT == ENABLED && \
+   ESP_AES_128_SUPPORT == ENABLED)
+   {IKE_TRANSFORM_ID_ENCR_NULL_AUTH_AES_GMAC, 16},
+#endif
+#if (ESP_NULL_SUPPORT == ENABLED && ESP_GMAC_SUPPORT == ENABLED && \
+   ESP_AES_192_SUPPORT == ENABLED)
+   {IKE_TRANSFORM_ID_ENCR_NULL_AUTH_AES_GMAC, 24},
+#endif
+#if (ESP_NULL_SUPPORT == ENABLED && ESP_GMAC_SUPPORT == ENABLED && \
+   ESP_AES_256_SUPPORT == ENABLED)
+   {IKE_TRANSFORM_ID_ENCR_NULL_AUTH_AES_GMAC, 32},
+#endif
+#if (ESP_NULL_SUPPORT == ENABLED)
+   {IKE_TRANSFORM_ID_ENCR_NULL, 0},
+#endif
 };
 
 
@@ -239,6 +254,17 @@ error_t espSelectEncAlgo(IkeChildSaEntry *childSa, uint16_t encAlgoId,
    //Initialize status code
    error = NO_ERROR;
 
+#if (ESP_NULL_SUPPORT == ENABLED)
+   //NULL encryption algorithm?
+   if(encAlgoId == IKE_TRANSFORM_ID_ENCR_NULL)
+   {
+      childSa->cipherMode = CIPHER_MODE_NULL;
+      childSa->cipherAlgo = NULL;
+      childSa->encKeyLen = 0;
+      childSa->ivLen = 0;
+   }
+   else
+#endif
 #if (ESP_IDEA_SUPPORT == ENABLED && ESP_CBC_SUPPORT == ENABLED)
    //IDEA-CBC encryption algorithm?
    if(encAlgoId == IKE_TRANSFORM_ID_ENCR_IDEA)
@@ -802,6 +828,52 @@ error_t espSelectEncAlgo(IkeChildSaEntry *childSa, uint16_t encAlgoId,
    }
    else
 #endif
+#if (ESP_NULL_SUPPORT == ENABLED && ESP_GMAC_SUPPORT == ENABLED && \
+   ESP_AES_128_SUPPORT == ENABLED)
+   //AES-GMAC with 128-bit key authentication algorithm?
+   if(encAlgoId == IKE_TRANSFORM_ID_ENCR_NULL_AUTH_AES_GMAC && encKeyLen == 16)
+   {
+      childSa->cipherMode = CIPHER_MODE_GMAC;
+      childSa->cipherAlgo = AES_CIPHER_ALGO;
+      childSa->encKeyLen = 16;
+      childSa->authKeyLen = 0;
+      childSa->saltLen = 4;
+      childSa->ivLen = 8;
+      childSa->icvLen = 16;
+
+   }
+   else
+#endif
+#if (ESP_NULL_SUPPORT == ENABLED && ESP_GMAC_SUPPORT == ENABLED && \
+   ESP_AES_192_SUPPORT == ENABLED)
+   //AES-GMAC with 192-bit key authentication algorithm?
+   if(encAlgoId == IKE_TRANSFORM_ID_ENCR_NULL_AUTH_AES_GMAC && encKeyLen == 24)
+   {
+      childSa->cipherMode = CIPHER_MODE_GMAC;
+      childSa->cipherAlgo = AES_CIPHER_ALGO;
+      childSa->encKeyLen = 24;
+      childSa->authKeyLen = 0;
+      childSa->saltLen = 4;
+      childSa->ivLen = 8;
+      childSa->icvLen = 16;
+   }
+   else
+#endif
+#if (ESP_NULL_SUPPORT == ENABLED && ESP_GMAC_SUPPORT == ENABLED && \
+   ESP_AES_256_SUPPORT == ENABLED)
+   //AES-GMAC with 256-bit key authentication algorithm?
+   if(encAlgoId == IKE_TRANSFORM_ID_ENCR_NULL_AUTH_AES_GMAC && encKeyLen == 32)
+   {
+      childSa->cipherMode = CIPHER_MODE_GMAC;
+      childSa->cipherAlgo = AES_CIPHER_ALGO;
+      childSa->encKeyLen = 32;
+      childSa->authKeyLen = 0;
+      childSa->saltLen = 4;
+      childSa->ivLen = 8;
+      childSa->icvLen = 16;
+   }
+   else
+#endif
    //Unknown encryption algorithm?
    {
       //Report an error
@@ -831,6 +903,7 @@ error_t espSelectAuthAlgo(IkeChildSaEntry *childSa, uint16_t authAlgoId)
    //AES-CMAC-96 authentication algorithm?
    if(authAlgoId == IKE_TRANSFORM_ID_AUTH_AES_CMAC_96)
    {
+      childSa->authMacAlgo = MAC_ALGO_CMAC;
       childSa->authHashAlgo = NULL;
       childSa->authCipherAlgo = AES_CIPHER_ALGO;
       childSa->authKeyLen = 16;
@@ -842,6 +915,7 @@ error_t espSelectAuthAlgo(IkeChildSaEntry *childSa, uint16_t authAlgoId)
    //HMAC-MD5-96 authentication algorithm?
    if(authAlgoId == IKE_TRANSFORM_ID_AUTH_HMAC_MD5_96)
    {
+      childSa->authMacAlgo = MAC_ALGO_HMAC;
       childSa->authHashAlgo = MD5_HASH_ALGO;
       childSa->authCipherAlgo = NULL;
       childSa->authKeyLen = MD5_DIGEST_SIZE;
@@ -853,6 +927,7 @@ error_t espSelectAuthAlgo(IkeChildSaEntry *childSa, uint16_t authAlgoId)
    //HMAC-SHA1-96 authentication algorithm?
    if(authAlgoId == IKE_TRANSFORM_ID_AUTH_HMAC_SHA1_96)
    {
+      childSa->authMacAlgo = MAC_ALGO_HMAC;
       childSa->authHashAlgo = SHA1_HASH_ALGO;
       childSa->authCipherAlgo = NULL;
       childSa->authKeyLen = SHA1_DIGEST_SIZE;
@@ -864,6 +939,7 @@ error_t espSelectAuthAlgo(IkeChildSaEntry *childSa, uint16_t authAlgoId)
    //HMAC-SHA256-128 authentication algorithm?
    if(authAlgoId == IKE_TRANSFORM_ID_AUTH_HMAC_SHA2_256_128)
    {
+      childSa->authMacAlgo = MAC_ALGO_HMAC;
       childSa->authHashAlgo = SHA256_HASH_ALGO;
       childSa->authCipherAlgo = NULL;
       childSa->authKeyLen = SHA256_DIGEST_SIZE;
@@ -875,6 +951,7 @@ error_t espSelectAuthAlgo(IkeChildSaEntry *childSa, uint16_t authAlgoId)
    //HMAC-SHA384-192 authentication algorithm?
    if(authAlgoId == IKE_TRANSFORM_ID_AUTH_HMAC_SHA2_384_192)
    {
+      childSa->authMacAlgo = MAC_ALGO_HMAC;
       childSa->authHashAlgo = SHA384_HASH_ALGO;
       childSa->authCipherAlgo = NULL;
       childSa->authKeyLen = SHA384_DIGEST_SIZE;
@@ -886,6 +963,7 @@ error_t espSelectAuthAlgo(IkeChildSaEntry *childSa, uint16_t authAlgoId)
    //HMAC-SHA512-256 authentication algorithm?
    if(authAlgoId == IKE_TRANSFORM_ID_AUTH_HMAC_SHA2_512_256)
    {
+      childSa->authMacAlgo = MAC_ALGO_HMAC;
       childSa->authHashAlgo = SHA512_HASH_ALGO;
       childSa->authCipherAlgo = NULL;
       childSa->authKeyLen = SHA512_DIGEST_SIZE;
@@ -906,26 +984,44 @@ error_t espSelectAuthAlgo(IkeChildSaEntry *childSa, uint16_t authAlgoId)
 
 /**
  * @brief Add the supported ESP transforms to the proposal
- * @param[in] context Pointer to the IKE context
+ * @param[in] childSa Pointer to the Child SA
  * @param[in,out] proposal Pointer to the Proposal substructure
  * @param[in,out] lastSubstruc Pointer to the Last Substruc field
  * @return Error code
  **/
 
-error_t espAddSupportedTransforms(IkeContext *context, IkeProposal *proposal,
-   uint8_t **lastSubstruc)
+error_t espAddSupportedTransforms(IkeChildSaEntry *childSa,
+   IkeProposal *proposal, uint8_t **lastSubstruc)
 {
    error_t error;
 
    //Add supported encryption transforms
-   error = espAddSupportedEncTransforms(context, proposal, lastSubstruc);
+   error = espAddSupportedEncTransforms(childSa, proposal, lastSubstruc);
 
    //Check status code
    if(!error)
    {
       //Add supported integrity transforms
-      error = espAddSupportedAuthTransforms(context, proposal, lastSubstruc);
+      error = espAddSupportedAuthTransforms(childSa, proposal, lastSubstruc);
    }
+
+#if (IKE_CHILD_SA_PFS_SUPPORT == ENABLED)
+   //Check status code
+   if(!error)
+   {
+      //Although ESP does not directly include a Diffie-Hellman exchange, a
+      //Diffie-Hellman group may be negotiated for the Child SA. This allows
+      //the peers to employ Diffie-Hellman in the CREATE_CHILD_SA exchange,
+      //providing perfect forward secrecy for the generated Child SA keys
+      //(refer to RFC 7296, section 3.3.2)
+      if(childSa->pfs)
+      {
+         //Add supported key exchange transforms
+         error = ikeAddSupportedKeTransforms(childSa->context, proposal,
+            lastSubstruc);
+      }
+   }
+#endif
 
    //Check status code
    if(!error)
@@ -933,7 +1029,7 @@ error_t espAddSupportedTransforms(IkeContext *context, IkeProposal *proposal,
       //An initiator who supports ESNs will usually include two ESN transforms,
       //with values "0" and "1", in its proposals (refer to RFC 7296,
       //section 3.3.2)
-      error = espAddSupportedEsnTransforms(context, proposal, lastSubstruc);
+      error = espAddSupportedEsnTransforms(childSa, proposal, lastSubstruc);
    }
 
    //Return status code
@@ -943,13 +1039,13 @@ error_t espAddSupportedTransforms(IkeContext *context, IkeProposal *proposal,
 
 /**
  * @brief Add the supported encryption transforms to the proposal
- * @param[in] context Pointer to the IKE context
+ * @param[in] childSa Pointer to the Child SA
  * @param[in,out] proposal Pointer to the Proposal substructure
  * @param[in,out] lastSubstruc Pointer to the Last Substruc field
  * @return Error code
  **/
 
-error_t espAddSupportedEncTransforms(IkeContext *context,
+error_t espAddSupportedEncTransforms(IkeChildSaEntry *childSa,
    IkeProposal *proposal, uint8_t **lastSubstruc)
 {
    error_t error;
@@ -974,13 +1070,13 @@ error_t espAddSupportedEncTransforms(IkeContext *context,
 
 /**
  * @brief Add the supported integrity transforms to the proposal
- * @param[in] context Pointer to the IKE context
+ * @param[in] childSa Pointer to the Child SA
  * @param[in,out] proposal Pointer to the Proposal substructure
  * @param[in,out] lastSubstruc Pointer to the Last Substruc field
  * @return Error code
  **/
 
-error_t espAddSupportedAuthTransforms(IkeContext *context,
+error_t espAddSupportedAuthTransforms(IkeChildSaEntry *childSa,
    IkeProposal *proposal, uint8_t **lastSubstruc)
 {
    error_t error;
@@ -1004,13 +1100,13 @@ error_t espAddSupportedAuthTransforms(IkeContext *context,
 
 /**
  * @brief Add the supported ESN transforms to the proposal
- * @param[in] context Pointer to the IKE context
+ * @param[in] childSa Pointer to the Child SA
  * @param[in,out] proposal Pointer to the Proposal substructure
  * @param[in,out] lastSubstruc Pointer to the Last Substruc field
  * @return Error code
  **/
 
-error_t espAddSupportedEsnTransforms(IkeContext *context,
+error_t espAddSupportedEsnTransforms(IkeChildSaEntry *childSa,
    IkeProposal *proposal, uint8_t **lastSubstruc)
 {
    error_t error;
@@ -1034,13 +1130,13 @@ error_t espAddSupportedEsnTransforms(IkeContext *context,
 
 /**
  * @brief Encryption transform negotiation
- * @param[in] context Pointer to the IKE context
+ * @param[in] childSa Pointer to the Child SA
  * @param[in] proposal Pointer to the Proposal substructure
  * @param[in] proposalLen Length of the Proposal substructure, in bytes
  * @return Selected encryption transform, if any
  **/
 
-const IkeEncAlgo *espSelectEncTransform(IkeContext *context,
+const IkeEncAlgo *espSelectEncTransform(IkeChildSaEntry *childSa,
    const IkeProposal *proposal, size_t proposalLen)
 {
    uint_t i;
@@ -1150,14 +1246,14 @@ const IkeEncAlgo *espSelectEncTransform(IkeContext *context,
 
 /**
  * @brief Integrity transform negotiation
- * @param[in] context Pointer to the IKE context
+ * @param[in] childSa Pointer to the Child SA
  * @param[in] proposal Pointer to the Proposal substructure
  * @param[in] proposalLen Length of the Proposal substructure, in bytes
  * @return Selected integrity transform, if any
  **/
 
-uint16_t espSelectAuthTransform(IkeContext *context, const IkeProposal *proposal,
-   size_t proposalLen)
+uint16_t espSelectAuthTransform(IkeChildSaEntry *childSa,
+   const IkeProposal *proposal, size_t proposalLen)
 {
    //Select the integrity transform to use
    return ikeSelectTransform(IKE_TRANSFORM_TYPE_INTEG, espSupportedAuthAlgos,
@@ -1167,14 +1263,14 @@ uint16_t espSelectAuthTransform(IkeContext *context, const IkeProposal *proposal
 
 /**
  * @brief ESN transform negotiation
- * @param[in] context Pointer to the IKE context
+ * @param[in] childSa Pointer to the Child SA
  * @param[in] proposal Pointer to the Proposal substructure
  * @param[in] proposalLen Length of the Proposal substructure, in bytes
  * @return Selected ESN transform, if any
  **/
 
-uint16_t espSelectEsnTransform(IkeContext *context, const IkeProposal *proposal,
-   size_t proposalLen)
+uint16_t espSelectEsnTransform(IkeChildSaEntry *childSa,
+   const IkeProposal *proposal, size_t proposalLen)
 {
    //Select the ESN transform to use
    return ikeSelectTransform(IKE_TRANSFORM_TYPE_ESN, espSupportedEsnTranforms,
@@ -1189,7 +1285,8 @@ uint16_t espSelectEsnTransform(IkeContext *context, const IkeProposal *proposal,
  * @return Error code
  **/
 
-error_t espSelectSaProposal(IkeChildSaEntry *childSa, const IkeSaPayload *payload)
+error_t espSelectSaProposal(IkeChildSaEntry *childSa,
+   const IkeSaPayload *payload)
 {
    error_t error;
    size_t n;
@@ -1204,6 +1301,9 @@ error_t espSelectSaProposal(IkeChildSaEntry *childSa, const IkeSaPayload *payloa
    childSa->encKeyLen = 0;
    childSa->authAlgoId = IKE_TRANSFORM_ID_INVALID;
    childSa->esn = IKE_TRANSFORM_ID_INVALID;
+#if (IKE_CHILD_SA_PFS_SUPPORT == ENABLED)
+   childSa->keContext.groupNum = IKE_TRANSFORM_ID_KE_NONE;
+#endif
 
    //Retrieve the length of the SA payload
    length = ntohs(payload->header.payloadLength);
@@ -1254,8 +1354,11 @@ error_t espSelectSaProposal(IkeChildSaEntry *childSa, const IkeSaPayload *payloa
          if(proposal->spiSize == IPSEC_SPI_SIZE &&
             osMemcmp(proposal->spi, IPSEC_INVALID_SPI, IPSEC_SPI_SIZE) != 0)
          {
+            //Initialize status code
+            error = NO_ERROR;
+
             //Encryption transform negotiation
-            encAlgo = espSelectEncTransform(childSa->context, proposal, n);
+            encAlgo = espSelectEncTransform(childSa, proposal, n);
 
             //Valid encryption transform?
             if(encAlgo != NULL)
@@ -1280,17 +1383,42 @@ error_t espSelectSaProposal(IkeChildSaEntry *childSa, const IkeSaPayload *payloa
             else
             {
                //Integrity transform negotiation
-               childSa->authAlgoId = espSelectAuthTransform(childSa->context,
-                  proposal, n);
+               childSa->authAlgoId = espSelectAuthTransform(childSa, proposal,
+                  n);
             }
 
             //ESN transform negotiation
-            childSa->esn = espSelectEsnTransform(childSa->context, proposal, n);
+            childSa->esn = espSelectEsnTransform(childSa, proposal, n);
 
+            //Unacceptable proposal?
+            if(childSa->encAlgoId == IKE_TRANSFORM_ID_INVALID ||
+               childSa->authAlgoId == IKE_TRANSFORM_ID_INVALID ||
+               childSa->esn == IKE_TRANSFORM_ID_INVALID)
+            {
+               error = ERROR_INVALID_PROPOSAL;
+            }
+
+#if (IKE_CHILD_SA_PFS_SUPPORT == ENABLED)
+            //Although ESP does not directly include a Diffie-Hellman exchange,
+            //a Diffie-Hellman group may be negotiated for the Child SA. This
+            //allows the peers to employ Diffie-Hellman in the CREATE_CHILD_SA
+            //exchange, providing perfect forward secrecy for the generated
+            //Child SA keys (refer to RFC 7296, section 3.3.2)
+            if(childSa->pfs)
+            {
+               //Key exchange transform negotiation
+               childSa->keContext.groupNum = ikeSelectKeTransform(
+                  childSa->context, proposal, n);
+
+               //Unacceptable proposal?
+               if(childSa->keContext.groupNum == IKE_TRANSFORM_ID_KE_NONE)
+               {
+                  error = ERROR_INVALID_PROPOSAL;
+               }
+            }
+#endif
             //Valid proposal?
-            if(childSa->encAlgoId != IKE_TRANSFORM_ID_INVALID &&
-               childSa->authAlgoId != IKE_TRANSFORM_ID_INVALID &&
-               childSa->esn != IKE_TRANSFORM_ID_INVALID)
+            if(!error)
             {
                //Select ESP security protocol
                childSa->protocol = IPSEC_PROTOCOL_ESP;
@@ -1302,7 +1430,6 @@ error_t espSelectSaProposal(IkeChildSaEntry *childSa, const IkeSaPayload *payloa
                osMemcpy(childSa->remoteSpi, proposal->spi, proposal->spiSize);
 
                //Successful negotiation
-               error = NO_ERROR;
                break;
             }
          }
@@ -1325,7 +1452,8 @@ error_t espSelectSaProposal(IkeChildSaEntry *childSa, const IkeSaPayload *payloa
  * @return Error code
  **/
 
-error_t espCheckSaProposal(IkeChildSaEntry *childSa, const IkeSaPayload *payload)
+error_t espCheckSaProposal(IkeChildSaEntry *childSa,
+   const IkeSaPayload *payload)
 {
    size_t n;
    size_t length;
@@ -1393,7 +1521,7 @@ error_t espCheckSaProposal(IkeChildSaEntry *childSa, const IkeSaPayload *payload
    }
 
    //Get the selected encryption transform
-   encAlgo = espSelectEncTransform(childSa->context, proposal, n);
+   encAlgo = espSelectEncTransform(childSa, proposal, n);
 
    //Valid encryption transform?
    if(encAlgo != NULL)
@@ -1421,12 +1549,11 @@ error_t espCheckSaProposal(IkeChildSaEntry *childSa, const IkeSaPayload *payload
          return ERROR_INVALID_PROPOSAL;
 
       //Get the selected integrity transform
-      childSa->authAlgoId = espSelectAuthTransform(childSa->context, proposal,
-         n);
+      childSa->authAlgoId = espSelectAuthTransform(childSa, proposal, n);
    }
 
    //Get the selected ESN transform
-   childSa->esn = espSelectEsnTransform(childSa->context, proposal, n);
+   childSa->esn = espSelectEsnTransform(childSa, proposal, n);
 
    //The initiator of an exchange must check that the accepted offer is
    //consistent with one of its proposals, and if not must terminate the

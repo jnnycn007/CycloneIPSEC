@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 #ifndef _IKE_PAYLOAD_FORMAT_H
@@ -40,16 +40,19 @@ extern "C" {
 #endif
 
 //IKE related functions
-error_t ikeFormatSaPayload(IkeSaEntry *sa, IkeChildSaEntry *childSa,
-   uint8_t *p, size_t *written, uint8_t **nextPayload);
+error_t ikeFormatSaPayload(IkeSaEntry *sa, const uint8_t *spi, uint8_t *p,
+   size_t *written, uint8_t **nextPayload);
 
 error_t ikeFormatSaProposal(IkeSaEntry *sa, const uint8_t *spi, uint8_t *p,
    size_t *written);
 
-error_t ikeFormatChildSaProposal(IkeChildSaEntry *childSa,
-   IpsecProtocol protocolId, const uint8_t *spi, uint8_t *p, size_t *written);
+error_t ikeFormatChildSaPayload(IkeChildSaEntry *childSa, uint8_t *p,
+   size_t *written, uint8_t **nextPayload);
 
-error_t ikeFormatKePayload(IkeSaEntry *sa, uint8_t *p, size_t *written,
+error_t ikeFormatChildSaProposal(IkeChildSaEntry *childSa, uint8_t *p,
+   size_t *written);
+
+error_t ikeFormatKePayload(IkeKeContext *keContext, uint8_t *p, size_t *written,
    uint8_t **nextPayload);
 
 error_t ikeFormatIdPayload(IkeSaEntry *sa, uint8_t *p, size_t *written,
@@ -74,6 +77,12 @@ error_t ikeFormatNotifyPayload(IkeSaEntry *sa, IkeChildSaEntry *childSa,
    IkeNotifyMsgType notifyMsgType, uint8_t *p, size_t *written,
    uint8_t **nextPayload);
 
+error_t ikeFormatNatDetectSrcIpNotificationData(IkeSaEntry *sa, uint8_t *p,
+   size_t *written);
+
+error_t ikeFormatNatDetectDestIpNotificationData(IkeSaEntry *sa, uint8_t *p,
+   size_t *written);
+
 error_t ikeFormatSignHashAlgosNotificationData(IkeSaEntry *sa, uint8_t *p,
    size_t *written);
 
@@ -86,7 +95,8 @@ error_t ikeFormatTsiPayload(IkeChildSaEntry *childSa, uint8_t *p,
 error_t ikeFormatTsrPayload(IkeChildSaEntry *childSa, uint8_t *p,
    size_t *written, uint8_t **nextPayload);
 
-error_t ikeFormatTs(const IkeTsParams *tsParams, uint8_t *p, size_t *written);
+error_t ikeFormatTsEntry(const IkeTsEntry *tsEntry, uint8_t *p,
+   size_t *written);
 
 //C++ guard
 #ifdef __cplusplus

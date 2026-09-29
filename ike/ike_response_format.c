@@ -1,6 +1,6 @@
 /**
- * @file ike_message_format.c
- * @brief IKE message formatting
+ * @file ike_response_format.c
+ * @brief IKE response formatting
  *
  * @section License
  *
@@ -25,27 +25,22 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 //Switch to the appropriate trace level
 #define TRACE_LEVEL IKE_TRACE_LEVEL
 
 //Dependencies
-#include "ipsec/ipsec_misc.h"
 #include "ike/ike.h"
 #include "ike/ike_fsm.h"
-#include "ike/ike_algorithms.h"
-#include "ike/ike_message_format.h"
 #include "ike/ike_message_encrypt.h"
+#include "ike/ike_response_format.h"
 #include "ike/ike_payload_format.h"
-#include "ike/ike_auth.h"
 #include "ike/ike_key_exchange.h"
 #include "ike/ike_key_material.h"
-#include "ike/ike_dh_groups.h"
 #include "ike/ike_misc.h"
 #include "ike/ike_debug.h"
-#include "ah/ah_algorithms.h"
 #include "debug.h"
 
 //Check IKEv2 library configuration
@@ -53,44 +48,54 @@
 
 
 /**
- * @brief Send IKE_SA_INIT request
- * @param[in] sa Pointer to the IKE SA
+ * @brief Send IKE response
+ * @param[in] context Pointer to the IKE context
+ * @param[in] message Pointer to the IKE message
+ * @param[in] length Length of the IKE message, in bytes
  * @return Error code
  **/
 
-error_t ikeSendIkeSaInitRequest(IkeSaEntry *sa)
+error_t ikeSendResponse(IkeContext *context, const uint8_t *message,
+   size_t length)
 {
    error_t error;
-   IkeContext *context;
+   SocketMsg msg;
 
-   //Initialize status code
-   error = NO_ERROR;
+   //Debug message
+   TRACE_INFO("Sending IKE message (%" PRIuSIZE " bytes)...\r\n", length);
+   //Dump IKE message for debugging purpose
+   ikeDumpMessage(message, length);
 
-   //Point to the IKE context
-   context = sa->context;
+   //An implementation must specify the address and port at which the request
+   //was received as the source address and port in the response (refer to
+   //RFC 7296, section 2.11)
+   msg = SOCKET_DEFAULT_MSG;
+   msg.interface = context->localInterface;
+   msg.srcIpAddr = context->localIpAddr;
+   msg.destIpAddr = context->remoteIpAddr;
+   msg.destPort = context->remotePort;
 
-   //The Message ID is a 32-bit quantity, which is zero for the IKE_SA_INIT
-   //messages (including retries of the message due to responses such as
-   //COOKIE and INVALID_KE_PAYLOAD)
-   sa->txMessageId = 0;
-
-   //Format IKE_SA_INIT request
-   error = ikeFormatIkeSaInitRequest(sa, sa->request, &sa->requestLen);
-
-   //Check status code
-   if(!error)
+#if (IKE_NAT_TRAVERSAL_SUPPORT == ENABLED)
+   //IKE packets must be sent from UDP port 500 or 4500
+   if(context->localPort == IPSEC_NAT_PORT)
    {
-      //Debug message
-      TRACE_INFO("Sending IKE message (%" PRIuSIZE " bytes)...\r\n", sa->requestLen);
-      //Dump IKE message for debugging purpose
-      ikeDumpMessage(sa->request, sa->requestLen);
+      //The UDP payload of all packets containing IKE messages sent on port 4500
+      //must begin with the prefix of four zeros (refer to RFC 7296, section 2)
+      msg.data = (uint8_t *) message - IKE_PREFIX_SIZE;
+      msg.length = length + IKE_PREFIX_SIZE;
 
-      //Send IKE request
-      socketSendTo(context->socket, &sa->remoteIpAddr, sa->remotePort,
-         sa->request, sa->requestLen, NULL, 0);
+      //Send IKE message from UDP port 4500
+      error = socketSendMsg(context->altSocket, &msg, 0);
+   }
+   else
+#endif
+   {
+      //Point to the IKE message to be transmitted
+      msg.data = (uint8_t *) message;
+      msg.length = length;
 
-      //Wait for the IKE_SA_INIT response from the responder
-      ikeChangeSaState(sa, IKE_SA_STATE_INIT_RESP);
+      //Send IKE message from UDP port 500
+      error = socketSendMsg(context->socket, &msg, 0);
    }
 
    //Return status code
@@ -121,7 +126,7 @@ error_t ikeSendIkeSaInitResponse(IkeSaEntry *sa)
       //Save the first message (IKE_SA_INIT request), starting with the first
       //octet of the first SPI in the header and ending with the last octet of
       //the last payload
-      osMemcpy(sa->request, context->message, sa->initiatorSaInitLen);
+      osMemcpy(sa->request, sa->initiatorSaInit, sa->initiatorSaInitLen);
       sa->initiatorSaInit = sa->request;
 
       //Each endpoint chooses one of the two SPIs and must choose them so as to
@@ -141,14 +146,16 @@ error_t ikeSendIkeSaInitResponse(IkeSaEntry *sa)
       if(!error)
       {
          //Generate an ephemeral key pair
-         error = ikeGenerateDhKeyPair(sa);
+         error = ikeGenerateKeyPair(&sa->keContext, context->prngAlgo,
+            context->prngContext);
       }
 
       //Check status code
       if(!error)
       {
          //Let g^ir be the Diffie-Hellman shared secret
-         error = ikeComputeDhSharedSecret(sa);
+         error = ikeComputeSharedSecret(&sa->keContext, sa->sharedSecret,
+            &sa->sharedSecretLen);
       }
 
       //Check status code
@@ -172,22 +179,20 @@ error_t ikeSendIkeSaInitResponse(IkeSaEntry *sa)
    //Check status code
    if(!error)
    {
+      //Four octets of zero are prepended to the IKE header
+      STORE32BE(IKE_PREFIX_VALUE, sa->response);
+
       //Format IKE_SA_INIT response
-      error = ikeFormatIkeSaInitResponse(sa, sa->response, &sa->responseLen);
+      error = ikeFormatIkeSaInitResponse(sa, sa->response + IKE_PREFIX_SIZE,
+         &sa->responseLen);
    }
 
    //Check status code
    if(!error)
    {
-      //Debug message
-      TRACE_INFO("Sending IKE message (%" PRIuSIZE " bytes)...\r\n", sa->responseLen);
-      //Dump IKE message for debugging purpose
-      ikeDumpMessage(sa->response, sa->responseLen);
-
       //An implementation must respond to the address and port from which the
       //request was received (refer to RFC 7296, section 2.11)
-      socketSendTo(context->socket, &context->remoteIpAddr, context->remotePort,
-         sa->response, sa->responseLen, NULL, 0);
+      ikeSendResponse(context, sa->response + IKE_PREFIX_SIZE, sa->responseLen);
 
       //In an IKE_SA_INIT exchange, any error notification causes the exchange
       //to fail (refer to RFC 7296, section 2.21.1)
@@ -215,95 +220,6 @@ error_t ikeSendIkeSaInitResponse(IkeSaEntry *sa)
 
 
 /**
- * @brief Send IKE_AUTH request
- * @param[in] sa Pointer to the IKE SA
- * @return Error code
- **/
-
-error_t ikeSendIkeAuthRequest(IkeSaEntry *sa)
-{
-   error_t error;
-   IkeContext *context;
-
-   //Point to the IKE context
-   context = sa->context;
-
-   //Save the second message (IKE_SA_INIT response), starting with the first
-   //octet of the first SPI in the header and ending with the last octet of
-   //the last payload
-   osMemcpy(sa->response, context->message, sa->responderSaInitLen);
-   sa->responderSaInit = sa->response;
-
-   //Save the first message (IKE_SA_INIT request), starting with the first
-   //octet of the first SPI in the header and ending with the last octet of
-   //the last payload
-   osMemcpy(context->message, sa->request, sa->initiatorSaInitLen);
-   sa->initiatorSaInit = context->message;
-
-   //Let g^ir be the Diffie-Hellman shared secret
-   error = ikeComputeDhSharedSecret(sa);
-
-   //Check status code
-   if(!error)
-   {
-      //At this point in the negotiation, each party can generate a quantity
-      //called SKEYSEED, from which all keys are derived for that IKE SA (refer
-      //to RFC 7296, section 1.2)
-      error = ikeGenerateSaKeyMaterial(sa, NULL);
-   }
-
-   //Check status code
-   if(!error)
-   {
-      //Valid Child SA?
-      if(sa->childSa != NULL)
-      {
-         //Generate a new SPI for the Child SA
-         error = ikeGenerateChildSaSpi(sa->childSa, sa->childSa->localSpi);
-      }
-   }
-
-   //Check status code
-   if(!error)
-   {
-      //The message ID is incremented for each subsequent exchange
-      sa->txMessageId++;
-
-      //Format IKE_AUTH request
-      error = ikeFormatIkeAuthRequest(sa, sa->request, &sa->requestLen);
-   }
-
-   //Check status code
-   if(!error)
-   {
-      //All messages following the initial exchange are cryptographically
-      //protected using the cryptographic algorithms and keys negotiated in
-      //the IKE_SA_INIT exchange (refer to RFC 7296, section 1.2)
-      error = ikeEncryptMessage(sa, sa->request, &sa->requestLen);
-   }
-
-   //Check status code
-   if(!error)
-   {
-      //Debug message
-      TRACE_INFO("Sending IKE message (%" PRIuSIZE " bytes)...\r\n", sa->requestLen);
-      //Dump IKE message for debugging purpose
-      ikeDumpMessage(sa->request, sa->requestLen);
-
-      //Send IKE request
-      socketSendTo(context->socket, &sa->remoteIpAddr, sa->remotePort,
-         sa->request, sa->requestLen, NULL, 0);
-
-      //Wait for the IKE_AUTH response from the responder
-      ikeChangeSaState(sa, IKE_SA_STATE_AUTH_RESP);
-   }
-
-   //Return status code
-   return error;
-}
-
-
-/**
  * @brief Send IKE_AUTH response
  * @param[in] sa Pointer to the IKE SA
  * @return Error code
@@ -321,12 +237,12 @@ error_t ikeSendIkeAuthResponse(IkeSaEntry *sa)
    //Point to the IKE context
    context = sa->context;
    //Point to the Child SA
-   childSa = sa->childSa;
+   childSa = sa->childSa2;
 
    //Save the second message (IKE_SA_INIT response), starting with the first
    //octet of the first SPI in the header and ending with the last octet of
    //the last payload
-   osMemcpy(context->message, sa->response, sa->responderSaInitLen);
+   osMemcpy(context->message, sa->responderSaInit, sa->responderSaInitLen);
    sa->responderSaInit = context->message;
 
    //Successful Child SA creation?
@@ -336,6 +252,7 @@ error_t ikeSendIkeAuthResponse(IkeSaEntry *sa)
       //IKE_SA_INIT exchange (refer to RFC 7296, section 2.17)
       osMemcpy(childSa->initiatorNonce, sa->initiatorNonce,
          sa->initiatorNonceLen);
+
       osMemcpy(childSa->responderNonce, sa->responderNonce,
          sa->responderNonceLen);
 
@@ -352,8 +269,12 @@ error_t ikeSendIkeAuthResponse(IkeSaEntry *sa)
    //Check status code
    if(!error)
    {
+      //Four octets of zero are prepended to the IKE header
+      STORE32BE(IKE_PREFIX_VALUE, sa->response);
+
       //Format IKE_AUTH response
-      error = ikeFormatIkeAuthResponse(sa, sa->response, &sa->responseLen);
+      error = ikeFormatIkeAuthResponse(sa, sa->response + IKE_PREFIX_SIZE,
+         &sa->responseLen);
    }
 
    //Check status code
@@ -362,21 +283,16 @@ error_t ikeSendIkeAuthResponse(IkeSaEntry *sa)
       //All messages following the initial exchange are cryptographically
       //protected using the cryptographic algorithms and keys negotiated in
       //the IKE_SA_INIT exchange (refer to RFC 7296, section 1.2)
-      error = ikeEncryptMessage(sa, sa->response, &sa->responseLen);
+      error = ikeEncryptMessage(sa, sa->response + IKE_PREFIX_SIZE,
+         &sa->responseLen);
    }
 
    //Check status code
    if(!error)
    {
-      //Debug message
-      TRACE_INFO("Sending IKE message (%" PRIuSIZE " bytes)...\r\n", sa->responseLen);
-      //Dump IKE message for debugging purpose
-      ikeDumpMessage(sa->response, sa->responseLen);
-
       //An implementation must respond to the address and port from which the
       //request was received (refer to RFC 7296, section 2.11)
-      socketSendTo(context->socket, &context->remoteIpAddr, context->remotePort,
-         sa->response, sa->responseLen, NULL, 0);
+      ikeSendResponse(context, sa->response + IKE_PREFIX_SIZE, sa->responseLen);
 
       //If creating the Child SA during the IKE_AUTH exchange fails for some
       //reason, the IKE SA is still created as usual (refer to RFC 7296,
@@ -400,6 +316,9 @@ error_t ikeSendIkeAuthResponse(IkeSaEntry *sa)
             //ESP and AH SAs exist in pairs (one in each direction), so two SAs
             //are created in a single Child SA negotiation for them
             ikeCreateIpsecSaPair(childSa);
+
+            //Detach the newly created Child SA
+            sa->childSa2 = NULL;
          }
 
 #if (IKE_INITIAL_CONTACT_SUPPORT == ENABLED)
@@ -444,28 +363,12 @@ error_t ikeSendIkeAuthResponse(IkeSaEntry *sa)
 
 
 /**
- * @brief Send CREATE_CHILD_SA request
- * @param[in] sa Pointer to the IKE SA
- * @param[in] childSa Pointer to the Child SA
- * @return Error code
- **/
-
-error_t ikeSendCreateChildSaRequest(IkeSaEntry *sa, IkeChildSaEntry *childSa)
-{
-   //Minimal implementations are not required to support the CREATE_CHILD_SA
-   //exchange (refer to RFC 7296, section 4)
-   return ERROR_NOT_IMPLEMENTED;
-}
-
-
-/**
  * @brief Send CREATE_CHILD_SA response
  * @param[in] sa Pointer to the IKE SA
- * @param[in] childSa Pointer to the Child SA
  * @return Error code
  **/
 
-error_t ikeSendCreateChildSaResponse(IkeSaEntry *sa, IkeChildSaEntry *childSa)
+error_t ikeSendCreateChildSaResponse(IkeSaEntry *sa)
 {
    error_t error;
    IkeContext *context;
@@ -473,8 +376,11 @@ error_t ikeSendCreateChildSaResponse(IkeSaEntry *sa, IkeChildSaEntry *childSa)
    //Point to the IKE context
    context = sa->context;
 
+   //Four octets of zero are prepended to the IKE header
+   STORE32BE(IKE_PREFIX_VALUE, sa->response);
+
    //Format CREATE_CHILD_SA response
-   error = ikeFormatCreateChildSaResponse(sa, childSa, sa->response,
+   error = ikeFormatCreateChildSaResponse(sa, sa->response + IKE_PREFIX_SIZE,
       &sa->responseLen);
 
    //Check status code
@@ -483,90 +389,16 @@ error_t ikeSendCreateChildSaResponse(IkeSaEntry *sa, IkeChildSaEntry *childSa)
       //All messages following the initial exchange are cryptographically
       //protected using the cryptographic algorithms and keys negotiated in
       //the IKE_SA_INIT exchange (refer to RFC 7296, section 1.2)
-      error = ikeEncryptMessage(sa, sa->response, &sa->responseLen);
+      error = ikeEncryptMessage(sa, sa->response + IKE_PREFIX_SIZE,
+         &sa->responseLen);
    }
 
    //Check status code
    if(!error)
    {
-      //Debug message
-      TRACE_INFO("Sending IKE message (%" PRIuSIZE " bytes)...\r\n", sa->responseLen);
-      //Dump IKE message for debugging purpose
-      ikeDumpMessage(sa->response, sa->responseLen);
-
       //An implementation must respond to the address and port from which the
       //request was received (refer to RFC 7296, section 2.11)
-      socketSendTo(context->socket, &context->remoteIpAddr, context->remotePort,
-         sa->response, sa->responseLen, NULL, 0);
-   }
-
-   //Return status code
-   return error;
-}
-
-
-/**
- * @brief Send INFORMATIONAL request
- * @param[in] sa Pointer to the IKE SA
- * @return Error code
- **/
-
-error_t ikeSendInfoRequest(IkeSaEntry *sa)
-{
-   error_t error;
-   IkeContext *context;
-
-   //Point to the IKE context
-   context = sa->context;
-
-   //The message ID is incremented for each subsequent exchange
-   sa->txMessageId++;
-
-   //Format INFORMATIONAL request
-   error = ikeFormatInfoRequest(sa, sa->request, &sa->requestLen);
-
-   //Check status code
-   if(!error)
-   {
-      //All messages following the initial exchange are cryptographically
-      //protected using the cryptographic algorithms and keys negotiated in
-      //the IKE_SA_INIT exchange (refer to RFC 7296, section 1.2)
-      error = ikeEncryptMessage(sa, sa->request, &sa->requestLen);
-   }
-
-   //Check status code
-   if(!error)
-   {
-      //Debug message
-      TRACE_INFO("Sending IKE message (%" PRIuSIZE " bytes)...\r\n", sa->requestLen);
-      //Dump IKE message for debugging purpose
-      ikeDumpMessage(sa->request, sa->requestLen);
-
-      //Send IKE request
-      socketSendTo(context->socket, &sa->remoteIpAddr, sa->remotePort,
-         sa->request, sa->requestLen, NULL, 0);
-
-      //Wait for the INFORMATIONAL response
-      if(sa->state == IKE_SA_STATE_DPD_REQ)
-      {
-         ikeChangeSaState(sa, IKE_SA_STATE_DPD_RESP);
-      }
-      else if(sa->state == IKE_SA_STATE_DELETE_REQ)
-      {
-         ikeChangeSaState(sa, IKE_SA_STATE_DELETE_RESP);
-      }
-      else if(sa->state == IKE_SA_STATE_DELETE_CHILD_REQ)
-      {
-         ikeChangeSaState(sa, IKE_SA_STATE_DELETE_CHILD_RESP);
-      }
-      else if(sa->state == IKE_SA_STATE_AUTH_FAILURE_REQ)
-      {
-         ikeChangeSaState(sa, IKE_SA_STATE_AUTH_FAILURE_RESP);
-      }
-      else
-      {
-         //Just for sanity
-      }
+      ikeSendResponse(context, sa->response + IKE_PREFIX_SIZE, sa->responseLen);
    }
 
    //Return status code
@@ -590,8 +422,12 @@ error_t ikeSendInfoResponse(IkeSaEntry *sa)
    //Point to the IKE context
    context = sa->context;
 
+   //Four octets of zero are prepended to the IKE header
+   STORE32BE(IKE_PREFIX_VALUE, sa->response);
+
    //Format INFORMATIONAL response
-   error = ikeFormatInfoResponse(sa, sa->response, &sa->responseLen);
+   error = ikeFormatInfoResponse(sa, sa->response + IKE_PREFIX_SIZE,
+      &sa->responseLen);
 
    //Check status code
    if(!error)
@@ -599,21 +435,16 @@ error_t ikeSendInfoResponse(IkeSaEntry *sa)
       //All messages following the initial exchange are cryptographically
       //protected using the cryptographic algorithms and keys negotiated in
       //the IKE_SA_INIT exchange (refer to RFC 7296, section 1.2)
-      error = ikeEncryptMessage(sa, sa->response, &sa->responseLen);
+      error = ikeEncryptMessage(sa, sa->response + IKE_PREFIX_SIZE,
+         &sa->responseLen);
    }
 
    //Check status code
    if(!error)
    {
-      //Debug message
-      TRACE_INFO("Sending IKE message (%" PRIuSIZE " bytes)...\r\n", sa->responseLen);
-      //Dump IKE message for debugging purpose
-      ikeDumpMessage(sa->response, sa->responseLen);
-
       //An implementation must respond to the address and port from which the
       //request was received (refer to RFC 7296, section 2.11)
-      socketSendTo(context->socket, &context->remoteIpAddr, context->remotePort,
-         sa->response, sa->responseLen, NULL, 0);
+      ikeSendResponse(context, sa->response + IKE_PREFIX_SIZE, sa->responseLen);
    }
 
    //Check whether the IKE SA should be closed
@@ -663,23 +494,21 @@ error_t ikeSendErrorResponse(IkeContext *context, uint8_t *message,
       //Copy the IKE header
       osMemcpy(&ikeHeader, message, sizeof(IkeHeader));
 
+      //Four octets of zero are prepended to the IKE header
+      STORE32BE(IKE_PREFIX_VALUE, context->message);
+
       //Format INFORMATIONAL response
-      error = ikeFormatErrorResponse(&ikeHeader, context->message,
-         &context->messageLen);
+      error = ikeFormatErrorResponse(&ikeHeader, context->message +
+         IKE_PREFIX_SIZE, &context->messageLen);
 
       //Check status code
       if(!error)
       {
-         //Debug message
-         TRACE_INFO("Sending IKE message (%" PRIuSIZE " bytes)...\r\n", context->messageLen);
-         //Dump IKE message for debugging purpose
-         ikeDumpMessage(context->message, context->messageLen);
-
-         //The message is always sent without cryptographic protection. The message
-         //is a response message, and thus it is sent to the IP address and port
-         //from whence it came (refer to RFC 7296, section 1.5)
-         error = socketSendTo(context->socket, &context->remoteIpAddr,
-            context->remotePort, context->message, context->messageLen, NULL, 0);
+         //The message is always sent without cryptographic protection. The
+         //message is a response message, and thus it is sent to the IP address
+         //and port from whence it came (refer to RFC 7296, section 1.5)
+         ikeSendResponse(context, context->message + IKE_PREFIX_SIZE,
+            context->messageLen);
       }
    }
    else
@@ -690,123 +519,6 @@ error_t ikeSendErrorResponse(IkeContext *context, uint8_t *message,
 
    //Return status code
    return error;
-}
-
-
-/**
- * @brief Format IKE_SA_INIT request
- * @param[in] sa Pointer to the IKE SA
- * @param[out] p Buffer where to format the message
- * @param[out] length Length of the resulting message, in bytes
- * @return Error code
- **/
-
-error_t ikeFormatIkeSaInitRequest(IkeSaEntry *sa, uint8_t *p, size_t *length)
-{
-   error_t error;
-   size_t n;
-   uint8_t *nextPayload;
-   IkeHeader *ikeHeader;
-
-   //Total length of the message
-   *length = 0;
-
-   //Each message begins with the IKE header
-   ikeHeader = (IkeHeader *) p;
-
-   //In the first message of an initial IKE exchange, the initiator will not
-   //know the responder's SPI value and will therefore set that field to zero
-   //(refer to RFC 7296, section 2.6)
-   osMemset(sa->responderSpi, 0, IKE_SPI_SIZE);
-
-   //Format IKE header
-   osMemcpy(ikeHeader->initiatorSpi, sa->initiatorSpi, IKE_SPI_SIZE);
-   osMemcpy(ikeHeader->responderSpi, sa->responderSpi, IKE_SPI_SIZE);
-   ikeHeader->nextPayload = IKE_PAYLOAD_TYPE_LAST;
-   ikeHeader->majorVersion = IKE_MAJOR_VERSION;
-   ikeHeader->minorVersion = IKE_MINOR_VERSION;
-   ikeHeader->exchangeType = IKE_EXCHANGE_TYPE_IKE_SA_INIT;
-   ikeHeader->flags = IKE_FLAGS_I;
-   ikeHeader->messageId = htonl(sa->txMessageId);
-
-   //Keep track of the Next Payload field
-   nextPayload = &ikeHeader->nextPayload;
-
-   //Point to the first IKE payload
-   p += sizeof(IkeHeader);
-   *length += sizeof(IkeHeader);
-
-   //If the IKE_SA_INIT response includes the COOKIE notification, the
-   //initiator must then retry the IKE_SA_INIT request (refer to RFC 7296,
-   //section 2.6)
-   if(sa->cookieLen > 0)
-   {
-      //The initiator must include the COOKIE notification containing the
-      //received data as the first payload, and all other payloads unchanged
-      error = ikeFormatNotifyPayload(sa, NULL, IKE_NOTIFY_MSG_TYPE_COOKIE,
-         p, &n, &nextPayload);
-      //Any error to report?
-      if(error)
-         return error;
-
-      //Point to the next payload
-      p += n;
-      *length += n;
-   }
-
-   //The SAi payload states the cryptographic algorithms the initiator supports
-   //for the IKE SA (refer to RFC 7296, section 1.2)
-   error = ikeFormatSaPayload(sa, NULL, p, &n, &nextPayload);
-   //Any error to report?
-   if(error)
-      return error;
-
-   //Point to the next payload
-   p += n;
-   *length += n;
-
-   //The KEi payload sends the initiator's Diffie-Hellman value
-   error = ikeFormatKePayload(sa, p, &n, &nextPayload);
-   //Any error to report?
-   if(error)
-      return error;
-
-   //Point to the next payload
-   p += n;
-   *length += n;
-
-   //The initiator sends its nonce in the Ni payload
-   error = ikeFormatNoncePayload(sa, NULL, p, &n, &nextPayload);
-   //Any error to report?
-   if(error)
-      return error;
-
-   //Point to the next payload
-   p += n;
-   *length += n;
-
-#if (IKE_SIGN_HASH_ALGOS_SUPPORT == ENABLED)
-   //The supported hash algorithms that can be used for the signature algorithms
-   //are indicated with a Notify payload of type SIGNATURE_HASH_ALGORITHMS sent
-   //inside the IKE_SA_INIT exchange (refer to RFC 7427, section 4)
-   error = ikeFormatNotifyPayload(sa, NULL,
-      IKE_NOTIFY_MSG_TYPE_SIGNATURE_HASH_ALGORITHMS, p, &n, &nextPayload);
-   //Any error to report?
-   if(error)
-      return error;
-
-   //Total length of the message
-   *length += n;
-#endif
-
-   //The Length field indicates the total length of the IKE message in octets
-   ikeHeader->length = htonl(*length);
-
-   //Save the length of the first message (IKE_SA_INIT request)
-   sa->initiatorSaInitLen = *length;
-
-   //Successful processing
-   return NO_ERROR;
 }
 
 
@@ -863,7 +575,7 @@ error_t ikeFormatIkeSaInitResponse(IkeSaEntry *sa, uint8_t *p, size_t *length)
       *length += n;
 
       //The responder completes the Diffie-Hellman exchange with the KEr payload
-      error = ikeFormatKePayload(sa, p, &n, &nextPayload);
+      error = ikeFormatKePayload(&sa->keContext, p, &n, &nextPayload);
       //Any error to report?
       if(error)
          return error;
@@ -871,6 +583,11 @@ error_t ikeFormatIkeSaInitResponse(IkeSaEntry *sa, uint8_t *p, size_t *length)
       //Point to the next payload
       p += n;
       *length += n;
+
+      //The ephemeral private key must be destroyed as soon as possible (refer
+      //to RFC 9206, section 10)
+      ikeFreeKeContext(&sa->keContext);
+      ikeInitKeContext(&sa->keContext);
 
       //The responder sends its nonce in the Nr payload
       error = ikeFormatNoncePayload(sa, NULL, p, &n, &nextPayload);
@@ -891,6 +608,40 @@ error_t ikeFormatIkeSaInitResponse(IkeSaEntry *sa, uint8_t *p, size_t *length)
       //Point to the next payload
       p += n;
       *length += n;
+
+#if (IKE_NAT_TRAVERSAL_SUPPORT == ENABLED)
+      //Check whether the initiator has included Notify payloads of type
+      //NAT_DETECTION_SOURCE_IP and NAT_DETECTION_DESTINATION_IP in its
+      //IKE_SA_INIT request
+      if(sa->natDetectSrcIp && sa->natDetectDestIp)
+      {
+         //There MAY be multiple NAT_DETECTION_SOURCE_IP payloads in a message
+         //if the sender does not know which of several network attachments will
+         //be used to send the packet (refer to RFC 7296, section 2.23)
+         error = ikeFormatNotifyPayload(sa, NULL,
+            IKE_NOTIFY_MSG_TYPE_NAT_DETECTION_SOURCE_IP, p, &n, &nextPayload);
+         //Any error to report?
+         if(error)
+            return error;
+
+         //Point to the next payload
+         p += n;
+         *length += n;
+
+         //The NAT_DETECTION_DESTINATION_IP payloads can be used to detect if
+         //there is NAT between the hosts
+         error = ikeFormatNotifyPayload(sa, NULL,
+            IKE_NOTIFY_MSG_TYPE_NAT_DETECTION_DESTINATION_IP, p, &n,
+            &nextPayload);
+         //Any error to report?
+         if(error)
+            return error;
+
+         //Point to the next payload
+         p += n;
+         *length += n;
+      }
+#endif
 
 #if (IKE_SIGN_HASH_ALGOS_SUPPORT == ENABLED)
       //The hash algorithms that can be used for the signature algorithms
@@ -922,181 +673,11 @@ error_t ikeFormatIkeSaInitResponse(IkeSaEntry *sa, uint8_t *p, size_t *length)
    //The Length field indicates the total length of the IKE message in octets
    ikeHeader->length = htonl(*length);
 
-   //Save the length of the second message (IKE_SA_INIT response)
+   //Save the second message (IKE_SA_INIT response), starting with the first
+   //octet of the first SPI in the header and ending with the last octet of
+   //the last payload
+   sa->responderSaInit = sa->response + IKE_PREFIX_SIZE;
    sa->responderSaInitLen = *length;
-
-   //Successful processing
-   return NO_ERROR;
-}
-
-
-/**
- * @brief Format IKE_AUTH request
- * @param[in] sa Pointer to the IKE SA
- * @param[out] p Buffer where to format the message
- * @param[out] length Length of the resulting message, in bytes
- * @return Error code
- **/
-
-error_t ikeFormatIkeAuthRequest(IkeSaEntry *sa, uint8_t *p, size_t *length)
-{
-   error_t error;
-   size_t n;
-   uint8_t *nextPayload;
-   IkeChildSaEntry *childSa;
-   IkeHeader *ikeHeader;
-   IkeIdPayload *idPayload;
-
-   //Point to the Child SA
-   childSa = sa->childSa;
-
-   //Total length of the message
-   *length = 0;
-
-   //Each message begins with the IKE header
-   ikeHeader = (IkeHeader *) p;
-
-   //Format IKE header
-   osMemcpy(ikeHeader->initiatorSpi, sa->initiatorSpi, IKE_SPI_SIZE);
-   osMemcpy(ikeHeader->responderSpi, sa->responderSpi, IKE_SPI_SIZE);
-   ikeHeader->nextPayload = IKE_PAYLOAD_TYPE_LAST;
-   ikeHeader->majorVersion = IKE_MAJOR_VERSION;
-   ikeHeader->minorVersion = IKE_MINOR_VERSION;
-   ikeHeader->exchangeType = IKE_EXCHANGE_TYPE_IKE_AUTH;
-   ikeHeader->flags = IKE_FLAGS_I;
-   ikeHeader->messageId = htonl(sa->txMessageId);
-
-   //Keep track of the Next Payload field
-   nextPayload = &ikeHeader->nextPayload;
-
-   //Point to the first IKE payload
-   p += sizeof(IkeHeader);
-   *length += sizeof(IkeHeader);
-
-   //The initiator asserts its identity with the IDi payload (refer to RFC 7296,
-   //section 1.2)
-   error = ikeFormatIdPayload(sa, p, &n, &nextPayload);
-   //Any error to report?
-   if(error)
-      return error;
-
-   //Point to the Identification payload
-   idPayload = (IkeIdPayload *) p;
-
-   //Point to the next payload
-   p += n;
-   *length += n;
-
-   //The initiator might send its certificate(s) in CERT payload(s)
-   error = ikeFormatCertPayloads(sa, p, &n, &nextPayload);
-   //Any error to report?
-   if(error)
-      return error;
-
-   //Point to the next payload
-   p += n;
-   *length += n;
-
-#if (IKE_INITIAL_CONTACT_SUPPORT == ENABLED)
-   //The INITIAL_CONTACT notification asserts that this IKE SA is the only
-   //IKE SA currently active between the authenticated identities
-   if(ikeIsInitialContact(sa))
-   {
-      //It may be sent when an IKE SA is established after a crash, and the
-      //recipient may use this information to delete any other IKE SAs it
-      //has to the same authenticated identity without waiting for a timeout
-      error = ikeFormatNotifyPayload(sa, NULL, IKE_NOTIFY_MSG_TYPE_INITIAL_CONTACT,
-         p, &n, &nextPayload);
-      //Any error to report?
-      if(error)
-         return error;
-
-      //Point to the next payload
-      p += n;
-      *length += n;
-   }
-#endif
-
-   //The initiator might also send list of its trust anchors in CERTREQ
-   //payload(s)
-   error = ikeFormatCertReqPayload(sa, p, &n, &nextPayload);
-   //Any error to report?
-   if(error)
-      return error;
-
-   //Point to the next payload
-   p += n;
-   *length += n;
-
-   //The initiator proves knowledge of the secret corresponding to IDi and
-   //integrity protects the contents of the first message using the AUTH payload
-   error = ikeFormatAuthPayload(sa, idPayload, p, &n, &nextPayload);
-   //Any error to report?
-   if(error)
-      return error;
-
-   //Point to the next payload
-   p += n;
-   *length += n;
-
-   //Child SAs can be created either by being piggybacked on the IKE_AUTH
-   //exchange, or using a separate CREATE_CHILD_SA exchange
-   if(childSa != NULL)
-   {
-      //The USE_TRANSPORT_MODE notification may be included in a request
-      //message that also includes an SA payload requesting a Child SA. It
-      //requests that the Child SA use transport mode rather than tunnel
-      //mode for the SA created (refer to RFC 7296, section 1.3.1)
-      if(childSa->mode == IPSEC_MODE_TRANSPORT)
-      {
-         //Include a notification of type USE_TRANSPORT_MODE
-         error = ikeFormatNotifyPayload(sa, childSa,
-            IKE_NOTIFY_MSG_TYPE_USE_TRANSPORT_MODE, p, &n, &nextPayload);
-         //Any error to report?
-         if(error)
-            return error;
-
-         //Point to the next payload
-         p += n;
-         *length += n;
-      }
-
-      //The initiator begins negotiation of a Child SA using the SAi payload
-      error = ikeFormatSaPayload(sa, childSa, p, &n, &nextPayload);
-      //Any error to report?
-      if(error)
-         return error;
-
-      //Point to the next payload
-      p += n;
-      *length += n;
-
-      //TSi specifies the source address of traffic forwarded from (or the
-      //destination address of traffic forwarded to) the initiator of the
-      //Child SA pair
-      error = ikeFormatTsiPayload(childSa, p, &n, &nextPayload);
-      //Any error to report?
-      if(error)
-         return error;
-
-      //Point to the next payload
-      p += n;
-      *length += n;
-
-      //TSr specifies the destination address of the traffic forwarded to (or
-      //the source address of the traffic forwarded from) the responder of the
-      //Child SA pair
-      error = ikeFormatTsrPayload(childSa, p, &n, &nextPayload);
-      //Any error to report?
-      if(error)
-         return error;
-
-      //Total length of the message
-      *length += n;
-   }
-
-   //The Length field indicates the total length of the IKE message in octets
-   ikeHeader->length = htonl(*length);
 
    //Successful processing
    return NO_ERROR;
@@ -1116,12 +697,8 @@ error_t ikeFormatIkeAuthResponse(IkeSaEntry *sa, uint8_t *p, size_t *length)
    error_t error;
    size_t n;
    uint8_t *nextPayload;
-   IkeChildSaEntry *childSa;
    IkeHeader *ikeHeader;
    IkeIdPayload *idPayload;
-
-   //Point to the Child SA
-   childSa = sa->childSa;
 
    //Total length of the message
    *length = 0;
@@ -1192,52 +769,10 @@ error_t ikeFormatIkeAuthResponse(IkeSaEntry *sa, uint8_t *p, size_t *length)
       *length += n;
 
       //The responder completes negotiation of a Child SA with additional fields
-      if(childSa != NULL)
+      if(sa->childSa2 != NULL)
       {
-         //The initiator can request that the Child SA use transport mode rather
-         //than tunnel mode for the SA created
-         if(childSa->mode == IPSEC_MODE_TRANSPORT)
-         {
-            //If the request is accepted, the response must also include a
-            //notification of type USE_TRANSPORT_MODE
-            error = ikeFormatNotifyPayload(sa, childSa,
-               IKE_NOTIFY_MSG_TYPE_USE_TRANSPORT_MODE, p, &n, &nextPayload);
-            //Any error to report?
-            if(error)
-               return error;
-
-            //Point to the next payload
-            p += n;
-            *length += n;
-         }
-
-         //The responder chooses a cryptographic suite from the initiator's
-         //offered choices and expresses that choice in the SAr payload
-         error = ikeFormatSaPayload(sa, sa->childSa, p, &n, &nextPayload);
-         //Any error to report?
-         if(error)
-            return error;
-
-         //Point to the next payload
-         p += n;
-         *length += n;
-
-         //TSi specifies the source address of traffic forwarded from (or the
-         //destination address of traffic forwarded to) the initiator of the
-         //Child SA pair
-         error = ikeFormatTsiPayload(childSa, p, &n, &nextPayload);
-         //Any error to report?
-         if(error)
-            return error;
-
-         //Point to the next payload
-         p += n;
-         *length += n;
-
-         //TSr specifies the destination address of the traffic forwarded to (or
-         //the source address of the traffic forwarded from) the responder of the
-         //Child SA pair
-         error = ikeFormatTsrPayload(childSa, p, &n, &nextPayload);
+         //Piggyback setup of the Child SA
+         error = ikeFormatChildSaCreateResponse(sa, p, &n, &nextPayload);
          //Any error to report?
          if(error)
             return error;
@@ -1247,10 +782,11 @@ error_t ikeFormatIkeAuthResponse(IkeSaEntry *sa, uint8_t *p, size_t *length)
       }
       else
       {
-         //Check whether the Child SA creation has failed
+         //Failed to create Child SA?
          if(sa->notifyMsgType != IKE_NOTIFY_MSG_TYPE_NONE)
          {
-            //Format Notify payload
+            //The Notify payload is used to transmit informational data, such
+            //as error conditions
             error = ikeFormatNotifyPayload(sa, NULL, sa->notifyMsgType, p, &n,
                &nextPayload);
 
@@ -1280,34 +816,15 @@ error_t ikeFormatIkeAuthResponse(IkeSaEntry *sa, uint8_t *p, size_t *length)
 
 
 /**
- * @brief Format CREATE_CHILD_SA request
- * @param[in] sa Pointer to the IKE SA
- * @param[in] childSa Pointer to the Child SA
- * @param[out] p Buffer where to format the message
- * @param[out] length Length of the resulting message, in bytes
- * @return Error code
- **/
-
-error_t ikeFormatCreateChildSaRequest(IkeSaEntry *sa, IkeChildSaEntry *childSa,
-   uint8_t *p, size_t *length)
-{
-   //Minimal implementations are not required to support the CREATE_CHILD_SA
-   //exchange (refer to RFC 7296, section 4)
-   return ERROR_NOT_IMPLEMENTED;
-}
-
-
-/**
  * @brief Format CREATE_CHILD_SA response
  * @param[in] sa Pointer to the IKE SA
- * @param[in] childSa Pointer to the Child SA
  * @param[out] p Buffer where to format the message
  * @param[out] length Length of the resulting message, in bytes
  * @return Error code
  **/
 
-error_t ikeFormatCreateChildSaResponse(IkeSaEntry *sa, IkeChildSaEntry *childSa,
-   uint8_t *p, size_t *length)
+error_t ikeFormatCreateChildSaResponse(IkeSaEntry *sa, uint8_t *p,
+   size_t *length)
 {
    error_t error;
    size_t n;
@@ -1347,120 +864,77 @@ error_t ikeFormatCreateChildSaResponse(IkeSaEntry *sa, IkeChildSaEntry *childSa,
    p += sizeof(IkeHeader);
    *length += sizeof(IkeHeader);
 
+#if (IKE_CREATE_CHILD_SA_SUPPORT == ENABLED)
+   //Successful Child SA creation?
+   if(sa->notifyMsgType == IKE_NOTIFY_MSG_TYPE_NONE)
+   {
+      //The CREATE_CHILD_SA exchange is used to create new Child SAs and to
+      //rekey both IKE SAs and Child SAs (refer to RFC 7296, section 1.3)
+      if(sa->childSa2 != NULL)
+      {
+         //Child SA creation/rekeying
+         error = ikeFormatChildSaCreateResponse(sa, p, &n, &nextPayload);
+
+         //Simultaneous rekeying?
+         if(sa->childSa1 != NULL)
+         {
+            //The peer will close the redundant SAs later based on the nonces
+         }
+         else
+         {
+            //Detach the newly created Child SA
+            sa->childSa2 = NULL;
+         }
+      }
+      else if(sa->newSa2 != NULL)
+      {
+         //IKE SA rekeying
+         error = ikeFormatIkeSaRekeyResponse(sa, p, &n, &nextPayload);
+
+         //Simultaneous rekeying?
+         if(sa->newSa1 != NULL)
+         {
+            //The peer will close the redundant SAs later based on the nonces
+         }
+         else
+         {
+            //Detach the newly created IKE SA
+            sa->newSa2 = NULL;
+         }
+      }
+      else
+      {
+         //Report an error
+         error = ERROR_FAILURE;
+      }
+   }
+   else
+   {
+      //The Notify payload is used to transmit informational data, such
+      //as error conditions
+      error = ikeFormatNotifyPayload(sa, NULL, sa->notifyMsgType, p, &n,
+         &nextPayload);
+   }
+#else
    //A minimal implementation may support the CREATE_CHILD_SA exchange only in
    //so far as to recognize requests and reject them with a Notify payload of
    //type NO_ADDITIONAL_SAS (refer to RFC 7296, section 4)
-   error = ikeFormatNotifyPayload(sa, NULL, IKE_NOTIFY_MSG_TYPE_NO_ADDITIONAL_SAS,
-      p, &n, &nextPayload);
-   //Any error to report?
-   if(error)
-      return error;
+   error = ikeFormatNotifyPayload(sa, NULL,
+      IKE_NOTIFY_MSG_TYPE_NO_ADDITIONAL_SAS, p, &n, &nextPayload);
+#endif
 
-   //Total length of the message
-   *length += n;
-
-   //The Length field indicates the total length of the IKE message in octets
-   ikeHeader->length = htonl(*length);
-
-   //Successful processing
-   return NO_ERROR;
-}
-
-
-/**
- * @brief Format INFORMATIONAL request
- * @param[in] sa Pointer to the IKE SA
- * @param[out] p Buffer where to format the message
- * @param[out] length Length of the resulting message, in bytes
- * @return Error code
- **/
-
-error_t ikeFormatInfoRequest(IkeSaEntry *sa, uint8_t *p,
-   size_t *length)
-{
-   error_t error;
-   size_t n;
-   uint8_t *nextPayload;
-   IkeHeader *ikeHeader;
-
-   //Total length of the message
-   *length = 0;
-
-   //Each message begins with the IKE header
-   ikeHeader = (IkeHeader *) p;
-
-   //Format IKE header
-   osMemcpy(ikeHeader->initiatorSpi, sa->initiatorSpi, IKE_SPI_SIZE);
-   osMemcpy(ikeHeader->responderSpi, sa->responderSpi, IKE_SPI_SIZE);
-   ikeHeader->nextPayload = IKE_PAYLOAD_TYPE_LAST;
-   ikeHeader->majorVersion = IKE_MAJOR_VERSION;
-   ikeHeader->minorVersion = IKE_MINOR_VERSION;
-   ikeHeader->exchangeType = IKE_EXCHANGE_TYPE_INFORMATIONAL;
-   ikeHeader->messageId = htonl(sa->txMessageId);
-
-   //This I bit must be set in messages sent by the original initiator of the
-   //IKE SA and must be cleared in messages sent by the original responder
-   if(sa->originalInitiator)
+   //Check status code
+   if(!error)
    {
-      ikeHeader->flags = IKE_FLAGS_I;
-   }
-   else
-   {
-      ikeHeader->flags = 0;
-   }
-
-   //Keep track of the Next Payload field
-   nextPayload = &ikeHeader->nextPayload;
-
-   //Point to the first IKE payload
-   p += sizeof(IkeHeader);
-   *length += sizeof(IkeHeader);
-
-   //Check the state of the IKE SA
-   if(sa->state == IKE_SA_STATE_DPD_REQ)
-   {
-      //An INFORMATIONAL request with no payloads is commonly used as a check
-      //for liveness (refer to RFC 7296, section 1)
-   }
-   else if(sa->state == IKE_SA_STATE_DELETE_REQ ||
-      sa->state == IKE_SA_STATE_DELETE_CHILD_REQ)
-   {
-      //To delete an SA, an INFORMATIONAL exchange with one or more Delete
-      //payloads is sent listing the SPIs (as they would be expected in the
-      //headers of inbound packets) of the SAs to be deleted
-      error = ikeFormatDeletePayload(sa, sa->childSa, p, &n, &nextPayload);
-      //Any error to report?
-      if(error)
-         return error;
-
       //Total length of the message
       *length += n;
-   }
-   else if(sa->state == IKE_SA_STATE_AUTH_FAILURE_REQ)
-   {
-      //All errors causing the authentication to fail for whatever reason
-      //(invalid shared secret, invalid ID, untrusted certificate issuer,
-      //revoked or expired certificate, etc.) should result in an
-      //AUTHENTICATION_FAILED notification
-      error = ikeFormatNotifyPayload(sa, NULL, IKE_NOTIFY_MSG_TYPE_AUTH_FAILED,
-         p, &n, &nextPayload);
-      //Any error to report?
-      if(error)
-         return error;
 
-      //Total length of the message
-      *length += n;
-   }
-   else
-   {
-      //Just for sanity
+      //The Length field indicates the total length of the IKE message in octets
+      ikeHeader->length = htonl(*length);
    }
 
-   //The Length field indicates the total length of the IKE message in octets
-   ikeHeader->length = htonl(*length);
-
-   //Successful processing
-   return NO_ERROR;
+   //Return status code
+   return error;
 }
 
 
@@ -1667,6 +1141,7 @@ error_t ikeFormatErrorResponse(IkeHeader *requestHeader, uint8_t *p,
    //The IKE SPIs are copied from the request
    osMemcpy(responseHeader->initiatorSpi, requestHeader->initiatorSpi,
       IKE_SPI_SIZE);
+
    osMemcpy(responseHeader->responderSpi, requestHeader->responderSpi,
       IKE_SPI_SIZE);
 
@@ -1712,6 +1187,189 @@ error_t ikeFormatErrorResponse(IkeHeader *requestHeader, uint8_t *p,
 
    //Successful processing
    return NO_ERROR;
+}
+
+
+/**
+ * @brief Format Child SA creation/rekeying response
+ * @param[in] sa Pointer to the IKE SA
+ * @param[out] p Buffer where to format the payloads
+ * @param[out] length Length of the resulting payloads, in bytes
+ * @param[in,out] nextPayload Pointer to the Next Payload field
+ * @return Error code
+ **/
+
+error_t ikeFormatChildSaCreateResponse(IkeSaEntry *sa, uint8_t *p,
+   size_t *length, uint8_t **nextPayload)
+{
+   error_t error;
+   size_t n;
+   IkeChildSaEntry *childSa;
+
+   //Point to the Child SA
+   childSa = sa->childSa2;
+
+   //Total length of the payloads
+   *length = 0;
+
+   //The initiator can request that the Child SA use transport mode rather than
+   //tunnel mode for the SA created
+   if(childSa->mode == IPSEC_MODE_TRANSPORT)
+   {
+      //If the request is accepted, the response must also include a
+      //notification of type USE_TRANSPORT_MODE
+      error = ikeFormatNotifyPayload(sa, childSa,
+         IKE_NOTIFY_MSG_TYPE_USE_TRANSPORT_MODE, p, &n, nextPayload);
+      //Any error to report?
+      if(error)
+         return error;
+
+      //Point to the next payload
+      p += n;
+      *length += n;
+   }
+
+   //The responder chooses a cryptographic suite from the initiator's offered
+   //choices and expresses that choice in the SAr payload
+   error = ikeFormatChildSaPayload(childSa, p, &n, nextPayload);
+   //Any error to report?
+   if(error)
+      return error;
+
+   //Point to the next payload
+   p += n;
+   *length += n;
+
+   //Child SA creation/rekeying?
+   if(sa->state >= IKE_SA_STATE_OPEN)
+   {
+      //The responder sends its nonce in the Nr payload
+      error = ikeFormatNoncePayload(sa, childSa, p, &n, nextPayload);
+      //Any error to report?
+      if(error)
+         return error;
+
+      //Point to the next payload
+      p += n;
+      *length += n;
+   }
+
+#if (IKE_CHILD_SA_PFS_SUPPORT == ENABLED)
+   //Perfect forward secrecy?
+   if(childSa->pfs)
+   {
+      //The responder replies with a Diffie-Hellman value in the KEr payload if
+      //KEi was included in the request and the selected cryptographic suite
+      //includes that group (refer to RFC 7296, section 1.3.1)
+      error = ikeFormatKePayload(&childSa->keContext, p, &n, nextPayload);
+      //Any error to report?
+      if(error)
+         return error;
+
+      //Point to the next payload
+      p += n;
+      *length += n;
+
+      //The ephemeral private key must be destroyed as soon as possible (refer
+      //to RFC 9206, section 10)
+      ikeFreeKeContext(&childSa->keContext);
+      ikeInitKeContext(&childSa->keContext);
+   }
+#endif
+
+   //TSi specifies the source address of traffic forwarded from (or the
+   //destination address of traffic forwarded to) the initiator of the
+   //Child SA pair
+   error = ikeFormatTsiPayload(childSa, p, &n, nextPayload);
+   //Any error to report?
+   if(error)
+      return error;
+
+   //Point to the next payload
+   p += n;
+   *length += n;
+
+   //TSr specifies the destination address of the traffic forwarded to (or
+   //the source address of the traffic forwarded from) the responder of the
+   //Child SA pair
+   error = ikeFormatTsrPayload(childSa, p, &n, nextPayload);
+   //Any error to report?
+   if(error)
+      return error;
+
+   //Total length of the payloads
+   *length += n;
+
+   //Successful processing
+   return NO_ERROR;
+}
+
+
+/**
+ * @brief Format IKE SA rekeying response
+ * @param[in] sa Pointer to the IKE SA
+ * @param[out] p Buffer where to format the payloads
+ * @param[out] length Length of the resulting payloads, in bytes
+ * @param[in,out] nextPayload Pointer to the Next Payload field
+ * @return Error code
+ **/
+
+error_t ikeFormatIkeSaRekeyResponse(IkeSaEntry *sa, uint8_t *p, size_t *length,
+   uint8_t **nextPayload)
+{
+#if (IKE_CREATE_CHILD_SA_SUPPORT == ENABLED)
+   error_t error;
+   size_t n;
+   IkeSaEntry *newSa;
+
+   //Point to the new IKE SA
+   newSa = sa->newSa2;
+
+   //Total length of the message
+   *length = 0;
+
+   //A new responder SPI is supplied in the SPI field of the SA payload (refer
+   //to 7296, section 1.3.2)
+   error = ikeFormatSaPayload(newSa, newSa->responderSpi, p, &n, nextPayload);
+   //Any error to report?
+   if(error)
+      return error;
+
+   //Point to the next payload
+   p += n;
+   *length += n;
+
+   //The responder sends its nonce in the Nr payload
+   error = ikeFormatNoncePayload(newSa, NULL, p, &n, nextPayload);
+   //Any error to report?
+   if(error)
+      return error;
+
+   //Point to the next payload
+   p += n;
+   *length += n;
+
+   //The responder completes the Diffie-Hellman exchange with the KEr payload
+   error = ikeFormatKePayload(&newSa->keContext, p, &n, nextPayload);
+   //Any error to report?
+   if(error)
+      return error;
+
+   //Total length of the payloads
+   *length += n;
+
+   //The ephemeral private key must be destroyed as soon as possible (refer to
+   //RFC 9206, section 10)
+   ikeFreeKeContext(&newSa->keContext);
+   ikeInitKeContext(&newSa->keContext);
+
+   //Successful processing
+   return NO_ERROR;
+#else
+   //Minimal implementations are not required to support the CREATE_CHILD_SA
+   //exchange (refer to RFC 7296, section 4)
+   return ERROR_NOT_IMPLEMENTED;
+#endif
 }
 
 #endif

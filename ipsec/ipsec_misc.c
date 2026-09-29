@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 //Dependencies
@@ -45,11 +45,13 @@ const uint8_t IPSEC_INVALID_SPI[4] = {0};
  * @param[in] context Pointer to the IPsec context
  * @param[in] policyAction Policy action
  * @param[in] selector Pointer to the IPsec selector
+ * @param[in] subset The selector must be a subset of the SPD entry's selector
  * @return Pointer to the matching SPD entry, if any
  **/
 
 IpsecSpdEntry *ipsecFindSpdEntry(IpsecContext *context,
-   IpsecPolicyAction policyAction, const IpsecSelector *selector)
+   IpsecPolicyAction policyAction, const IpsecSelector *selector,
+   bool_t subset)
 {
    uint_t i;
    IpsecSelector temp;
@@ -67,15 +69,24 @@ IpsecSpdEntry *ipsecFindSpdEntry(IpsecContext *context,
          //Valid entry?
          if(entry->policyAction != IPSEC_POLICY_ACTION_INVALID)
          {
-            //Matching policy action
+            //Matching policy action?
             if(policyAction == IPSEC_POLICY_ACTION_INVALID ||
                entry->policyAction == policyAction)
             {
-               //Check if there is a non-null intersection between the values of
-               //the selectors
-               if(ipsecIntersectSelectors(&entry->selector, selector, &temp))
+               //Compare selectors
+               if(subset)
                {
-                  return entry;
+                  if(ipsecIsSubsetSelector(selector, &entry->selector))
+                  {
+                     return entry;
+                  }
+               }
+               else
+               {
+                  if(ipsecIntersectSelectors(selector, &entry->selector, &temp))
+                  {
+                     return entry;
+                  }
                }
             }
          }
@@ -438,7 +449,57 @@ bool_t ipsecIsSubsetSelector(const IpsecSelector *selector1,
       selector2->remoteIpAddr.start.length == sizeof(Ipv6Addr) &&
       selector2->remoteIpAddr.end.length == sizeof(Ipv6Addr))
    {
-      return FALSE;
+      //Check whether the first selector is valid
+      if(osMemcmp(&selector1->localIpAddr.start.ipv6Addr,
+         &selector1->localIpAddr.end.ipv6Addr, 16) > 0)
+      {
+         return FALSE;
+      }
+
+      if(osMemcmp(&selector1->remoteIpAddr.start.ipv6Addr,
+         &selector1->remoteIpAddr.end.ipv6Addr, 16) > 0)
+      {
+         return FALSE;
+      }
+
+      //Check whether the second selector is valid
+      if(osMemcmp(&selector2->localIpAddr.start.ipv6Addr,
+         &selector2->localIpAddr.end.ipv6Addr, 16) > 0)
+      {
+         return FALSE;
+      }
+
+      if(osMemcmp(&selector2->remoteIpAddr.start.ipv6Addr,
+         &selector2->remoteIpAddr.end.ipv6Addr, 16) > 0)
+      {
+         return FALSE;
+      }
+
+      //Compare local IP address ranges
+      if(osMemcmp(&selector1->localIpAddr.start.ipv6Addr,
+         &selector2->localIpAddr.start.ipv6Addr, 16) < 0)
+      {
+         return FALSE;
+      }
+
+      if(osMemcmp(&selector1->localIpAddr.end.ipv6Addr,
+         &selector2->localIpAddr.end.ipv6Addr, 16) > 0)
+      {
+         return FALSE;
+      }
+
+      //Compare remote IP address ranges
+      if(osMemcmp(&selector1->remoteIpAddr.start.ipv6Addr,
+         &selector2->remoteIpAddr.start.ipv6Addr, 16) < 0)
+      {
+         return FALSE;
+      }
+
+      if(osMemcmp(&selector1->remoteIpAddr.end.ipv6Addr,
+         &selector2->remoteIpAddr.end.ipv6Addr, 16) > 0)
+      {
+         return FALSE;
+      }
    }
    else
 #endif
@@ -448,85 +509,84 @@ bool_t ipsecIsSubsetSelector(const IpsecSelector *selector1,
    }
 
    //Check Next Layer Protocol value
-   if(selector2->nextProtocol == IPSEC_PROTOCOL_ANY)
+   if(selector2->nextProtocol != IPSEC_PROTOCOL_ANY &&
+      selector2->nextProtocol != selector1->nextProtocol)
    {
-      //ANY is a wildcard that matches any value protocol value
+      return FALSE;
    }
-   else
+
+   //Check whether the first selector is valid
+   if(selector1->localPort.start > selector1->localPort.end &&
+      (selector1->localPort.start != IPSEC_PORT_START_OPAQUE ||
+      selector1->localPort.end != IPSEC_PORT_END_OPAQUE))
    {
-      //Compare Next Layer Protocol value
-      if(selector1->nextProtocol != selector2->nextProtocol)
-      {
-         return FALSE;
-      }
+      return FALSE;
+   }
+
+   if(selector1->remotePort.start > selector1->remotePort.end &&
+      (selector1->remotePort.start != IPSEC_PORT_START_OPAQUE ||
+      selector1->remotePort.end != IPSEC_PORT_END_OPAQUE))
+   {
+      return FALSE;
+   }
+
+   //Check whether the second selector is valid
+   if(selector2->localPort.start > selector2->localPort.end &&
+      (selector2->localPort.start != IPSEC_PORT_START_OPAQUE ||
+      selector2->localPort.end != IPSEC_PORT_END_OPAQUE))
+   {
+      return FALSE;
+   }
+
+   if(selector2->remotePort.start > selector2->remotePort.end &&
+      (selector2->remotePort.start != IPSEC_PORT_START_OPAQUE ||
+      selector2->remotePort.end != IPSEC_PORT_END_OPAQUE))
+   {
+      return FALSE;
    }
 
    //Check local port ranges
    if(selector1->localPort.start == IPSEC_PORT_START_OPAQUE &&
-      selector1->localPort.end == IPSEC_PORT_END_OPAQUE &&
-      selector2->localPort.start == IPSEC_PORT_START_OPAQUE &&
-      selector2->localPort.end == IPSEC_PORT_END_OPAQUE)
+      selector1->localPort.end == IPSEC_PORT_END_OPAQUE)
    {
       //OPAQUE indicates that the corresponding selector field is not
       //available for examination
    }
-   else if(selector1->localPort.start == IPSEC_PORT_START_OPAQUE &&
-      selector1->localPort.end == IPSEC_PORT_END_OPAQUE &&
-      selector2->localPort.start == IPSEC_PORT_START_ANY &&
-      selector2->localPort.end == IPSEC_PORT_END_ANY)
+   else if(selector2->localPort.start == IPSEC_PORT_START_OPAQUE &&
+      selector2->localPort.end == IPSEC_PORT_END_OPAQUE)
    {
-      //The ANY value encompasses the OPAQUE value (refer to RFC 4301,
-      //section 4.4.1)
+      return FALSE;
+   }
+   else if(selector1->localPort.start >= selector2->localPort.start &&
+      selector1->localPort.end <= selector2->localPort.end)
+   {
+      //The first port range is a subset of the second port range
    }
    else
    {
-      //Check whether the selectors are valid
-      if(selector1->localPort.start > selector1->localPort.end ||
-         selector2->localPort.start > selector2->localPort.end)
-      {
-         return FALSE;
-      }
-
-      //Compare local port ranges
-      if(selector1->localPort.start < selector2->localPort.start ||
-         selector1->localPort.end > selector2->localPort.end)
-      {
-         return FALSE;
-      }
+      return FALSE;
    }
 
    //Check remote port ranges
    if(selector1->remotePort.start == IPSEC_PORT_START_OPAQUE &&
-      selector1->remotePort.end == IPSEC_PORT_END_OPAQUE &&
-      selector2->remotePort.start == IPSEC_PORT_START_OPAQUE &&
-      selector2->remotePort.end == IPSEC_PORT_END_OPAQUE)
+      selector1->remotePort.end == IPSEC_PORT_END_OPAQUE)
    {
       //OPAQUE indicates that the corresponding selector field is not
       //available for examination
    }
-   else if(selector1->remotePort.start == IPSEC_PORT_START_OPAQUE &&
-      selector1->remotePort.end == IPSEC_PORT_END_OPAQUE &&
-      selector2->remotePort.start == IPSEC_PORT_START_ANY &&
-      selector2->remotePort.end == IPSEC_PORT_END_ANY)
+   else if(selector2->remotePort.start == IPSEC_PORT_START_OPAQUE &&
+      selector2->remotePort.end == IPSEC_PORT_END_OPAQUE)
    {
-      //The ANY value encompasses the OPAQUE value (refer to RFC 4301,
-      //section 4.4.1)
+      return FALSE;
+   }
+   else if(selector1->remotePort.start >= selector2->remotePort.start &&
+      selector1->remotePort.end <= selector2->remotePort.end)
+   {
+      //The first port range is a subset of the second port range
    }
    else
    {
-      //Check whether the selectors are valid
-      if(selector1->remotePort.start > selector1->remotePort.end ||
-         selector2->remotePort.start > selector2->remotePort.end)
-      {
-         return FALSE;
-      }
-
-      //Compare remote port ranges
-      if(selector1->remotePort.start < selector2->remotePort.start ||
-         selector1->remotePort.end > selector2->remotePort.end)
-      {
-         return FALSE;
-      }
+      return FALSE;
    }
 
    //The first selector is a subset of the second selector
@@ -647,7 +707,115 @@ bool_t ipsecIntersectSelectors(const IpsecSelector *selector1,
       selector2->remoteIpAddr.start.length == sizeof(Ipv6Addr) &&
       selector2->remoteIpAddr.end.length == sizeof(Ipv6Addr))
    {
-      return FALSE;
+      //Check whether the first selector is valid
+      if(osMemcmp(&selector1->localIpAddr.start.ipv6Addr,
+         &selector1->localIpAddr.end.ipv6Addr, 16) > 0)
+      {
+         return FALSE;
+      }
+
+      if(osMemcmp(&selector1->remoteIpAddr.start.ipv6Addr,
+         &selector1->remoteIpAddr.end.ipv6Addr, 16) > 0)
+      {
+         return FALSE;
+      }
+
+      //Check whether the second selector is valid
+      if(osMemcmp(&selector2->localIpAddr.start.ipv6Addr,
+         &selector2->localIpAddr.end.ipv6Addr, 16) > 0)
+      {
+         return FALSE;
+      }
+
+      if(osMemcmp(&selector2->remoteIpAddr.start.ipv6Addr,
+         &selector2->remoteIpAddr.end.ipv6Addr, 16) > 0)
+      {
+         return FALSE;
+      }
+
+      //Check local IP address ranges
+      if(osMemcmp(&selector1->localIpAddr.start.ipv6Addr,
+         &selector2->localIpAddr.end.ipv6Addr, 16) > 0)
+      {
+         return FALSE;
+      }
+
+      if(osMemcmp(&selector1->localIpAddr.end.ipv6Addr,
+         &selector2->localIpAddr.start.ipv6Addr, 16) < 0)
+      {
+         return FALSE;
+      }
+
+      //Calculate the intersection of the local IP address ranges
+      result->localIpAddr.start.length = sizeof(Ipv6Addr);
+
+      if(osMemcmp(&selector1->localIpAddr.start.ipv6Addr,
+         &selector2->localIpAddr.start.ipv6Addr, 16) > 0)
+      {
+         ipv6CopyAddr(&result->localIpAddr.start.ipv6Addr,
+            &selector1->localIpAddr.start.ipv6Addr);
+      }
+      else
+      {
+         ipv6CopyAddr(&result->localIpAddr.start.ipv6Addr,
+            &selector2->localIpAddr.start.ipv6Addr);
+      }
+
+      result->localIpAddr.end.length = sizeof(Ipv6Addr);
+
+      if(osMemcmp(&selector1->localIpAddr.end.ipv6Addr,
+         &selector2->localIpAddr.end.ipv6Addr, 16) < 0)
+      {
+         ipv6CopyAddr(&result->localIpAddr.end.ipv6Addr,
+            &selector1->localIpAddr.end.ipv6Addr);
+      }
+      else
+      {
+         ipv6CopyAddr(&result->localIpAddr.end.ipv6Addr,
+            &selector2->localIpAddr.end.ipv6Addr);
+      }
+
+      //Check remote IP address ranges
+      if(osMemcmp(&selector1->remoteIpAddr.start.ipv6Addr,
+         &selector2->remoteIpAddr.end.ipv6Addr, 16) > 0)
+      {
+         return FALSE;
+      }
+
+      if(osMemcmp(&selector1->remoteIpAddr.end.ipv6Addr,
+         &selector2->remoteIpAddr.start.ipv6Addr, 16) < 0)
+      {
+         return FALSE;
+      }
+
+      //Calculate the intersection of the remote IP address ranges
+      result->remoteIpAddr.start.length = sizeof(Ipv6Addr);
+
+      if(osMemcmp(&selector1->remoteIpAddr.start.ipv6Addr,
+         &selector2->remoteIpAddr.start.ipv6Addr, 16) > 0)
+      {
+         ipv6CopyAddr(&result->remoteIpAddr.start.ipv6Addr,
+            &selector1->remoteIpAddr.start.ipv6Addr);
+      }
+      else
+      {
+         ipv6CopyAddr(&result->remoteIpAddr.start.ipv6Addr,
+            &selector2->remoteIpAddr.start.ipv6Addr);
+      }
+
+      result->remoteIpAddr.end.length = sizeof(Ipv6Addr);
+
+      if(osMemcmp(&selector1->remoteIpAddr.end.ipv6Addr,
+         &selector2->remoteIpAddr.end.ipv6Addr, 16) < 0)
+      {
+         ipv6CopyAddr(&result->remoteIpAddr.end.ipv6Addr,
+            &selector1->remoteIpAddr.end.ipv6Addr);
+      }
+      else
+      {
+         ipv6CopyAddr(&result->remoteIpAddr.end.ipv6Addr,
+            &selector2->remoteIpAddr.end.ipv6Addr);
+      }
    }
    else
 #endif
@@ -676,47 +844,50 @@ bool_t ipsecIntersectSelectors(const IpsecSelector *selector1,
       return FALSE;
    }
 
+   //Check whether the first selector is valid
+   if(selector1->localPort.start > selector1->localPort.end &&
+      (selector1->localPort.start != IPSEC_PORT_START_OPAQUE ||
+      selector1->localPort.end != IPSEC_PORT_END_OPAQUE))
+   {
+      return FALSE;
+   }
+
+   if(selector1->remotePort.start > selector1->remotePort.end &&
+      (selector1->remotePort.start != IPSEC_PORT_START_OPAQUE ||
+      selector1->remotePort.end != IPSEC_PORT_END_OPAQUE))
+   {
+      return FALSE;
+   }
+
+   //Check whether the second selector is valid
+   if(selector2->localPort.start > selector2->localPort.end &&
+      (selector2->localPort.start != IPSEC_PORT_START_OPAQUE ||
+      selector2->localPort.end != IPSEC_PORT_END_OPAQUE))
+   {
+      return FALSE;
+   }
+
+   if(selector2->remotePort.start > selector2->remotePort.end &&
+      (selector2->remotePort.start != IPSEC_PORT_START_OPAQUE ||
+      selector2->remotePort.end != IPSEC_PORT_END_OPAQUE))
+   {
+      return FALSE;
+   }
+
    //Check local port ranges
-   if(selector1->localPort.start == IPSEC_PORT_START_OPAQUE &&
-      selector1->localPort.end == IPSEC_PORT_END_OPAQUE &&
-      selector2->localPort.start == IPSEC_PORT_START_OPAQUE &&
-      selector2->localPort.end == IPSEC_PORT_END_OPAQUE)
+   if((selector1->localPort.start == IPSEC_PORT_START_OPAQUE &&
+      selector1->localPort.end == IPSEC_PORT_END_OPAQUE) ||
+      (selector2->localPort.start == IPSEC_PORT_START_OPAQUE &&
+      selector2->localPort.end == IPSEC_PORT_END_OPAQUE))
    {
       //OPAQUE indicates that the corresponding selector field is not
       //available for examination
       result->localPort.start = IPSEC_PORT_START_OPAQUE;
       result->localPort.end = IPSEC_PORT_END_OPAQUE;
    }
-   else if(selector1->localPort.start == IPSEC_PORT_START_OPAQUE &&
-      selector1->localPort.end == IPSEC_PORT_END_OPAQUE &&
-      selector2->localPort.start == IPSEC_PORT_START_ANY &&
-      selector2->localPort.end == IPSEC_PORT_END_ANY)
-   {
-      //The ANY value encompasses the OPAQUE value (refer to RFC 4301,
-      //section 4.4.1)
-      result->localPort.start = IPSEC_PORT_START_OPAQUE;
-      result->localPort.end = IPSEC_PORT_END_OPAQUE;
-   }
-   else if(selector1->localPort.start == IPSEC_PORT_START_ANY &&
-      selector1->localPort.end == IPSEC_PORT_END_ANY &&
-      selector2->localPort.start == IPSEC_PORT_START_OPAQUE &&
-      selector2->localPort.end == IPSEC_PORT_END_OPAQUE)
-   {
-      //The ANY value encompasses the OPAQUE value (refer to RFC 4301,
-      //section 4.4.1)
-      result->localPort.start = IPSEC_PORT_START_OPAQUE;
-      result->localPort.end = IPSEC_PORT_END_OPAQUE;
-   }
    else
    {
-      //Check whether the selectors are valid
-      if(selector1->localPort.start > selector1->localPort.end ||
-         selector2->localPort.start > selector2->localPort.end)
-      {
-         return FALSE;
-      }
-
-      //Check local port ranges
+      //Empty intersection?
       if(selector1->localPort.start > selector2->localPort.end ||
          selector1->localPort.end < selector2->localPort.start)
       {
@@ -732,46 +903,19 @@ bool_t ipsecIntersectSelectors(const IpsecSelector *selector1,
    }
 
    //Check remote port ranges
-   if(selector1->remotePort.start == IPSEC_PORT_START_OPAQUE &&
-      selector1->remotePort.end == IPSEC_PORT_END_OPAQUE &&
-      selector2->remotePort.start == IPSEC_PORT_START_OPAQUE &&
-      selector2->remotePort.end == IPSEC_PORT_END_OPAQUE)
+   if((selector1->remotePort.start == IPSEC_PORT_START_OPAQUE &&
+      selector1->remotePort.end == IPSEC_PORT_END_OPAQUE) ||
+      (selector2->remotePort.start == IPSEC_PORT_START_OPAQUE &&
+      selector2->remotePort.end == IPSEC_PORT_END_OPAQUE))
    {
       //OPAQUE indicates that the corresponding selector field is not
       //available for examination
       result->remotePort.start = IPSEC_PORT_START_OPAQUE;
       result->remotePort.end = IPSEC_PORT_END_OPAQUE;
    }
-   else if(selector1->remotePort.start == IPSEC_PORT_START_OPAQUE &&
-      selector1->remotePort.end == IPSEC_PORT_END_OPAQUE &&
-      selector2->remotePort.start == IPSEC_PORT_START_ANY &&
-      selector2->remotePort.end == IPSEC_PORT_END_ANY)
-   {
-      //The ANY value encompasses the OPAQUE value (refer to RFC 4301,
-      //section 4.4.1)
-      result->remotePort.start = IPSEC_PORT_START_OPAQUE;
-      result->remotePort.end = IPSEC_PORT_END_OPAQUE;
-   }
-   else if(selector1->remotePort.start == IPSEC_PORT_START_ANY &&
-      selector1->remotePort.end == IPSEC_PORT_END_ANY &&
-      selector2->remotePort.start == IPSEC_PORT_START_OPAQUE &&
-      selector2->remotePort.end == IPSEC_PORT_END_OPAQUE)
-   {
-      //The ANY value encompasses the OPAQUE value (refer to RFC 4301,
-      //section 4.4.1)
-      result->remotePort.start = IPSEC_PORT_START_OPAQUE;
-      result->remotePort.end = IPSEC_PORT_END_OPAQUE;
-   }
    else
    {
-      //Check whether the selectors are valid
-      if(selector1->remotePort.start > selector1->remotePort.end ||
-         selector2->remotePort.start > selector2->remotePort.end)
-      {
-         return FALSE;
-      }
-
-      //Check remote port ranges
+      //Empty intersection?
       if(selector1->remotePort.start > selector2->remotePort.end ||
          selector1->remotePort.end < selector2->remotePort.start)
       {

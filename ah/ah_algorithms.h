@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 #ifndef _AH_ALGORITHMS_H
@@ -43,23 +43,26 @@ extern "C" {
 //AH related functions
 error_t ahSelectAuthAlgo(IkeChildSaEntry *childSa, uint16_t authAlgoId);
 
-error_t ahAddSupportedTransforms(IkeContext *context, IkeProposal *proposal,
-   uint8_t **lastSubstruc);
-
-error_t ahAddSupportedAuthTransforms(IkeContext *context,
+error_t ahAddSupportedTransforms(IkeChildSaEntry *childSa,
    IkeProposal *proposal, uint8_t **lastSubstruc);
 
-error_t ahAddSupportedEsnTransforms(IkeContext *context,
+error_t ahAddSupportedAuthTransforms(IkeChildSaEntry *childSa,
    IkeProposal *proposal, uint8_t **lastSubstruc);
 
-uint16_t ahSelectAuthTransform(IkeContext *context, const IkeProposal *proposal,
-   size_t proposalLen);
+error_t ahAddSupportedEsnTransforms(IkeChildSaEntry *childSa,
+   IkeProposal *proposal, uint8_t **lastSubstruc);
 
-uint16_t ahSelectEsnTransform(IkeContext *context, const IkeProposal *proposal,
-   size_t proposalLen);
+uint16_t ahSelectAuthTransform(IkeChildSaEntry *childSa,
+   const IkeProposal *proposal, size_t proposalLen);
 
-error_t ahSelectSaProposal(IkeChildSaEntry *childSa, const IkeSaPayload *payload);
-error_t ahCheckSaProposal(IkeChildSaEntry *childSa, const IkeSaPayload *payload);
+uint16_t ahSelectEsnTransform(IkeChildSaEntry *childSa,
+   const IkeProposal *proposal, size_t proposalLen);
+
+error_t ahSelectSaProposal(IkeChildSaEntry *childSa,
+   const IkeSaPayload *payload);
+
+error_t ahCheckSaProposal(IkeChildSaEntry *childSa,
+   const IkeSaPayload *payload);
 
 //C++ guard
 #ifdef __cplusplus

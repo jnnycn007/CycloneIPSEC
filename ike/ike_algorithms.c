@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 //Switch to the appropriate trace level
@@ -948,6 +948,7 @@ error_t ikeSelectAuthAlgo(IkeSaEntry *sa, uint16_t authAlgoId)
    //AES-CMAC-96 authentication algorithm?
    if(authAlgoId == IKE_TRANSFORM_ID_AUTH_AES_CMAC_96)
    {
+      sa->authMacAlgo = MAC_ALGO_CMAC;
       sa->authHashAlgo = NULL;
       sa->authCipherAlgo = AES_CIPHER_ALGO;
       sa->authKeyLen = 16;
@@ -959,6 +960,7 @@ error_t ikeSelectAuthAlgo(IkeSaEntry *sa, uint16_t authAlgoId)
    //HMAC-MD5-96 authentication algorithm?
    if(authAlgoId == IKE_TRANSFORM_ID_AUTH_HMAC_MD5_96)
    {
+      sa->authMacAlgo = MAC_ALGO_HMAC;
       sa->authHashAlgo = MD5_HASH_ALGO;
       sa->authCipherAlgo = NULL;
       sa->authKeyLen = MD5_DIGEST_SIZE;
@@ -970,6 +972,7 @@ error_t ikeSelectAuthAlgo(IkeSaEntry *sa, uint16_t authAlgoId)
    //HMAC-SHA1-96 authentication algorithm?
    if(authAlgoId == IKE_TRANSFORM_ID_AUTH_HMAC_SHA1_96)
    {
+      sa->authMacAlgo = MAC_ALGO_HMAC;
       sa->authHashAlgo = SHA1_HASH_ALGO;
       sa->authCipherAlgo = NULL;
       sa->authKeyLen = SHA1_DIGEST_SIZE;
@@ -981,6 +984,7 @@ error_t ikeSelectAuthAlgo(IkeSaEntry *sa, uint16_t authAlgoId)
    //HMAC-SHA256-128 authentication algorithm?
    if(authAlgoId == IKE_TRANSFORM_ID_AUTH_HMAC_SHA2_256_128)
    {
+      sa->authMacAlgo = MAC_ALGO_HMAC;
       sa->authHashAlgo = SHA256_HASH_ALGO;
       sa->authCipherAlgo = NULL;
       sa->authKeyLen = SHA256_DIGEST_SIZE;
@@ -992,6 +996,7 @@ error_t ikeSelectAuthAlgo(IkeSaEntry *sa, uint16_t authAlgoId)
    //HMAC-SHA384-192 authentication algorithm?
    if(authAlgoId == IKE_TRANSFORM_ID_AUTH_HMAC_SHA2_384_192)
    {
+      sa->authMacAlgo = MAC_ALGO_HMAC;
       sa->authHashAlgo = SHA384_HASH_ALGO;
       sa->authCipherAlgo = NULL;
       sa->authKeyLen = SHA384_DIGEST_SIZE;
@@ -1003,6 +1008,7 @@ error_t ikeSelectAuthAlgo(IkeSaEntry *sa, uint16_t authAlgoId)
    //HMAC-SHA512-256 authentication algorithm?
    if(authAlgoId == IKE_TRANSFORM_ID_AUTH_HMAC_SHA2_512_256)
    {
+      sa->authMacAlgo = MAC_ALGO_HMAC;
       sa->authHashAlgo = SHA512_HASH_ALGO;
       sa->authCipherAlgo = NULL;
       sa->authKeyLen = SHA512_DIGEST_SIZE;
@@ -1014,6 +1020,7 @@ error_t ikeSelectAuthAlgo(IkeSaEntry *sa, uint16_t authAlgoId)
    //AES-XCBC-MAC-96 authentication algorithm?
    if(authAlgoId == IKE_TRANSFORM_ID_AUTH_AES_XCBC_96)
    {
+      sa->authMacAlgo = MAC_ALGO_XCBC_MAC;
       sa->authHashAlgo = NULL;
       sa->authCipherAlgo = AES_CIPHER_ALGO;
       sa->authKeyLen = 16;
@@ -1050,6 +1057,7 @@ error_t ikeSelectPrfAlgo(IkeSaEntry *sa, uint16_t prfAlgoId)
    //AES-CMAC PRF algorithm?
    if(prfAlgoId == IKE_TRANSFORM_ID_PRF_AES128_CMAC)
    {
+      sa->prfMacAlgo = MAC_ALGO_CMAC;
       sa->prfHashAlgo = NULL;
       sa->prfCipherAlgo = AES_CIPHER_ALGO;
       sa->prfKeyLen = 16;
@@ -1060,6 +1068,7 @@ error_t ikeSelectPrfAlgo(IkeSaEntry *sa, uint16_t prfAlgoId)
    //HMAC-MD5 PRF algorithm?
    if(prfAlgoId == IKE_TRANSFORM_ID_PRF_HMAC_MD5)
    {
+      sa->prfMacAlgo = MAC_ALGO_HMAC;
       sa->prfHashAlgo = MD5_HASH_ALGO;
       sa->prfCipherAlgo = NULL;
       sa->prfKeyLen = MD5_DIGEST_SIZE;
@@ -1070,6 +1079,7 @@ error_t ikeSelectPrfAlgo(IkeSaEntry *sa, uint16_t prfAlgoId)
    //HMAC-SHA1 PRF algorithm?
    if(prfAlgoId == IKE_TRANSFORM_ID_PRF_HMAC_SHA1)
    {
+      sa->prfMacAlgo = MAC_ALGO_HMAC;
       sa->prfHashAlgo = SHA1_HASH_ALGO;
       sa->prfCipherAlgo = NULL;
       sa->prfKeyLen = SHA1_DIGEST_SIZE;
@@ -1080,6 +1090,7 @@ error_t ikeSelectPrfAlgo(IkeSaEntry *sa, uint16_t prfAlgoId)
    //HMAC-SHA256 PRF algorithm?
    if(prfAlgoId == IKE_TRANSFORM_ID_PRF_HMAC_SHA2_256)
    {
+      sa->prfMacAlgo = MAC_ALGO_HMAC;
       sa->prfHashAlgo = SHA256_HASH_ALGO;
       sa->prfCipherAlgo = NULL;
       sa->prfKeyLen = SHA256_DIGEST_SIZE;
@@ -1090,6 +1101,7 @@ error_t ikeSelectPrfAlgo(IkeSaEntry *sa, uint16_t prfAlgoId)
    //HMAC-SHA384 PRF algorithm?
    if(prfAlgoId == IKE_TRANSFORM_ID_PRF_HMAC_SHA2_384)
    {
+      sa->prfMacAlgo = MAC_ALGO_HMAC;
       sa->prfHashAlgo = SHA384_HASH_ALGO;
       sa->prfCipherAlgo = NULL;
       sa->prfKeyLen = SHA384_DIGEST_SIZE;
@@ -1100,6 +1112,7 @@ error_t ikeSelectPrfAlgo(IkeSaEntry *sa, uint16_t prfAlgoId)
    //HMAC-SHA512 PRF algorithm?
    if(prfAlgoId == IKE_TRANSFORM_ID_PRF_HMAC_SHA2_512)
    {
+      sa->prfMacAlgo = MAC_ALGO_HMAC;
       sa->prfHashAlgo = SHA512_HASH_ALGO;
       sa->prfCipherAlgo = NULL;
       sa->prfKeyLen = SHA512_DIGEST_SIZE;
@@ -1110,6 +1123,7 @@ error_t ikeSelectPrfAlgo(IkeSaEntry *sa, uint16_t prfAlgoId)
    //HMAC-Tiger PRF algorithm?
    if(prfAlgoId == IKE_TRANSFORM_ID_PRF_HMAC_TIGER)
    {
+      sa->prfMacAlgo = MAC_ALGO_HMAC;
       sa->prfHashAlgo = TIGER_HASH_ALGO;
       sa->prfCipherAlgo = NULL;
       sa->prfKeyLen = TIGER_DIGEST_SIZE;
@@ -1120,6 +1134,7 @@ error_t ikeSelectPrfAlgo(IkeSaEntry *sa, uint16_t prfAlgoId)
    //AES-XCBC-MAC PRF algorithm?
    if(prfAlgoId == IKE_TRANSFORM_ID_PRF_AES128_XCBC)
    {
+      sa->prfMacAlgo = MAC_ALGO_XCBC_MAC;
       sa->prfHashAlgo = NULL;
       sa->prfCipherAlgo = AES_CIPHER_ALGO;
       sa->prfKeyLen = 16;
@@ -1734,7 +1749,7 @@ error_t ikeSelectSaProposal(IkeSaEntry *sa, const IkeSaPayload *payload,
    const IkeEncAlgo *encAlgo;
 
    //Clear the set of parameters
-   sa->groupNum = IKE_TRANSFORM_ID_KE_NONE;
+   sa->keContext.groupNum = IKE_TRANSFORM_ID_KE_NONE;
    sa->prfAlgoId = IKE_TRANSFORM_ID_INVALID;
    sa->encAlgoId = IKE_TRANSFORM_ID_INVALID;
    sa->encKeyLen = 0;
@@ -1787,7 +1802,7 @@ error_t ikeSelectSaProposal(IkeSaEntry *sa, const IkeSaPayload *payload,
          proposal->spiSize == spiSize)
       {
          //Key exchange transform negotiation
-         sa->groupNum = ikeSelectKeTransform(sa->context, proposal, n);
+         sa->keContext.groupNum = ikeSelectKeTransform(sa->context, proposal, n);
          //PRF transform negotiation
          sa->prfAlgoId = ikeSelectPrfTransform(sa->context, proposal, n);
          //Encryption transform negotiation
@@ -1820,7 +1835,7 @@ error_t ikeSelectSaProposal(IkeSaEntry *sa, const IkeSaPayload *payload,
          }
 
          //Valid proposal?
-         if(sa->groupNum != IKE_TRANSFORM_ID_KE_NONE &&
+         if(sa->keContext.groupNum != IKE_TRANSFORM_ID_KE_NONE &&
             sa->prfAlgoId != IKE_TRANSFORM_ID_INVALID &&
             sa->encAlgoId != IKE_TRANSFORM_ID_INVALID &&
             sa->authAlgoId != IKE_TRANSFORM_ID_INVALID)
@@ -1972,7 +1987,7 @@ error_t ikeCheckSaProposal(IkeSaEntry *sa, const IkeSaPayload *payload)
    }
 
    //Make sure the selected key exchange method is acceptable
-   if(ikeSelectKeTransform(sa->context, proposal, n) != sa->groupNum)
+   if(ikeSelectKeTransform(sa->context, proposal, n) != sa->keContext.groupNum)
       return ERROR_INVALID_PROPOSAL;
 
    //Get the selected PRF transform
@@ -2012,7 +2027,7 @@ error_t ikeCheckSaProposal(IkeSaEntry *sa, const IkeSaPayload *payload)
    //The initiator of an exchange must check that the accepted offer is
    //consistent with one of its proposals, and if not must terminate the
    //exchange (refer to RFC 7296, section 3.3.6)
-   if(sa->groupNum != IKE_TRANSFORM_ID_KE_NONE &&
+   if(sa->keContext.groupNum != IKE_TRANSFORM_ID_KE_NONE &&
       sa->prfAlgoId != IKE_TRANSFORM_ID_INVALID &&
       sa->encAlgoId != IKE_TRANSFORM_ID_INVALID &&
       sa->authAlgoId != IKE_TRANSFORM_ID_INVALID)
@@ -2081,7 +2096,8 @@ bool_t ikeIsAeadEncAlgo(uint16_t encAlgoId)
       encAlgoId == IKE_TRANSFORM_ID_ENCR_CAMELLIA_CCM_8 ||
       encAlgoId == IKE_TRANSFORM_ID_ENCR_CAMELLIA_CCM_12 ||
       encAlgoId == IKE_TRANSFORM_ID_ENCR_CAMELLIA_CCM_16 ||
-      encAlgoId == IKE_TRANSFORM_ID_ENCR_CHACHA20_POLY1305)
+      encAlgoId == IKE_TRANSFORM_ID_ENCR_CHACHA20_POLY1305 ||
+      encAlgoId == IKE_TRANSFORM_ID_ENCR_NULL_AUTH_AES_GMAC)
    {
       return TRUE;
    }
@@ -2112,7 +2128,8 @@ bool_t ikeIsVariableLengthKeyEncAlgo(uint16_t encAlgoId)
       encAlgoId == IKE_TRANSFORM_ID_ENCR_CAMELLIA_CTR ||
       encAlgoId == IKE_TRANSFORM_ID_ENCR_CAMELLIA_CCM_8 ||
       encAlgoId == IKE_TRANSFORM_ID_ENCR_CAMELLIA_CCM_12 ||
-      encAlgoId == IKE_TRANSFORM_ID_ENCR_CAMELLIA_CCM_16)
+      encAlgoId == IKE_TRANSFORM_ID_ENCR_CAMELLIA_CCM_16 ||
+      encAlgoId == IKE_TRANSFORM_ID_ENCR_NULL_AUTH_AES_GMAC)
    {
       return TRUE;
    }

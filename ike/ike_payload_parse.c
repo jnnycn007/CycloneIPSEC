@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 //Switch to the appropriate trace level
@@ -47,6 +47,113 @@
 
 //Check IKEv2 library configuration
 #if (IKE_SUPPORT == ENABLED)
+
+
+/**
+ * @brief Parse IKE message payloads
+ * @param[in] message Pointer to the IKE message
+ * @param[in] length Length of the IKE message, in bytes
+ * @param[out] payloads IKE message payloads
+ **/
+
+void ikeParseIkeMessagePayloads(const uint8_t *message, size_t length,
+   IkeMessagePayloads *payloads)
+{
+   //The Security Association payload, denoted SA, is used to negotiate
+   //attributes of a Security Association (refer to RFC 7296, section 3.3)
+   payloads->sa = (IkeSaPayload *) ikeGetPayload(message, length,
+      IKE_PAYLOAD_TYPE_SA, 0);
+
+   //The Key Exchange payload, denoted KE, is used to exchange Diffie-Hellman
+   //public numbers as part of a Diffie-Hellman key exchange (refer to RFC 7296,
+   //section 3.4)
+   payloads->ke = (IkeKePayload *) ikeGetPayload(message, length,
+      IKE_PAYLOAD_TYPE_KE, 0);
+
+   //The Identification payloads, denoted IDi and IDr, allow peers to assert an
+   //identity to one another (refer to RFC 7296, section 3.5)
+   payloads->idi = (IkeIdPayload *) ikeGetPayload(message, length,
+      IKE_PAYLOAD_TYPE_IDI, 0);
+
+   payloads->idr = (IkeIdPayload *) ikeGetPayload(message, length,
+      IKE_PAYLOAD_TYPE_IDR, 0);
+
+   //The Certificate payload, denoted CERT, provides a means to transport
+   //certificates or other authentication-related information via IKE (refer
+   //to RFC 7296, section 3.6)
+   payloads->cert = (IkeCertPayload *) ikeGetPayload(message, length,
+      IKE_PAYLOAD_TYPE_CERT, 0);
+
+   //The Certificate Request payload, denoted CERTREQ, provides a means to
+   //request preferred certificates via IKE (refer to RFC 7296, section 3.7)
+   payloads->certReq = (IkeCertReqPayload *) ikeGetPayload(message, length,
+      IKE_PAYLOAD_TYPE_CERTREQ, 0);
+
+   //The Authentication payload, denoted AUTH, contains data used for
+   //authentication purposes (refer to RFC 7296, section 3.8)
+   payloads->auth = (IkeAuthPayload *) ikeGetPayload(message, length,
+      IKE_PAYLOAD_TYPE_AUTH, 0);
+
+   //The Nonce payload, denoted as Ni and Nr, contains random data used to
+   //guarantee liveness during an exchange and protect against replay attacks
+   //(Refer to RFC 7296, section 3.9)
+   payloads->nonce = (IkeNoncePayload *) ikeGetPayload(message, length,
+      IKE_PAYLOAD_TYPE_NONCE, 0);
+
+   //The Traffic Selector payload, denoted TSi and TSr, allows peers to identify
+   //packet flows for processing by IPsec security services (refer to RFC 7296,
+   //section 3.13
+   payloads->tsi = (IkeTsPayload *) ikeGetPayload(message, length,
+      IKE_PAYLOAD_TYPE_TSI, 0);
+
+   payloads->tsr = (IkeTsPayload *) ikeGetPayload(message, length,
+      IKE_PAYLOAD_TYPE_TSR, 0);
+
+   //The USE_TRANSPORT_MODE notification may be included in a request
+   //message that also includes an SA payload requesting a Child SA
+   payloads->useTransportModeNotify = ikeGetStatusNotifyPayload(message, length,
+      IKE_NOTIFY_MSG_TYPE_USE_TRANSPORT_MODE, 0);
+
+   //The REKEY_SA notification is included in a CREATE_CHILD_SA exchange if the
+   //purpose of the exchange is to replace an existing ESP or AH SA
+   payloads->rekeySaNotify = ikeGetStatusNotifyPayload(message, length,
+      IKE_NOTIFY_MSG_TYPE_REKEY_SA, 0);
+
+#if (IKE_COOKIE_SUPPORT == ENABLED)
+   //Check whether the message includes a COOKIE notification
+   payloads->cookieNotify = ikeGetStatusNotifyPayload(message, length,
+      IKE_NOTIFY_MSG_TYPE_COOKIE, 0);
+#endif
+
+#if (IKE_INITIAL_CONTACT_SUPPORT == ENABLED)
+   //The INITIAL_CONTACT notification asserts that this IKE SA is the only IKE
+   //SA currently active between the authenticated identities
+   payloads->initialContactNotify = ikeGetStatusNotifyPayload(message, length,
+      IKE_NOTIFY_MSG_TYPE_INITIAL_CONTACT, 0);
+#endif
+
+#if (IKE_SIGN_HASH_ALGOS_SUPPORT == ENABLED)
+   //The supported hash algorithms that can be used for the signature algorithms
+   //are indicated with a Notify payload of type SIGNATURE_HASH_ALGORITHMS sent
+   //inside the IKE_SA_INIT exchange (refer to RFC 7427, section 4)
+   payloads->signHashAlgosNotify = ikeGetStatusNotifyPayload(message, length,
+      IKE_NOTIFY_MSG_TYPE_SIGNATURE_HASH_ALGORITHMS, 0);
+#endif
+
+#if (IKE_NAT_TRAVERSAL_SUPPORT == ENABLED)
+   //The NAT_DETECTION_SOURCE_IP and NAT_DETECTION_DESTINATION_IP payloads can
+   //be used to detect if there is NAT between the hosts, and which end is
+   //behind the NAT (refer to RFC 7296, section 2.23)
+   payloads->natDetectSrcIpNotify = ikeGetStatusNotifyPayload(message, length,
+      IKE_NOTIFY_MSG_TYPE_NAT_DETECTION_SOURCE_IP, 0);
+
+   payloads->natDetectDestIpNotify = ikeGetStatusNotifyPayload(message, length,
+      IKE_NOTIFY_MSG_TYPE_NAT_DETECTION_DESTINATION_IP, 0);
+#endif
+
+   //Check whether the message includes an error notification
+   payloads->errorNotify = ikeGetErrorNotifyPayload(message, length);
+}
 
 
 /**
@@ -301,12 +408,13 @@ error_t ikeParseTransformAttr(const IkeTransformAttr *attr, size_t length,
 
 /**
  * @brief Parse Key Exchange payload
- * @param[in] sa Pointer to the IKE SA
+ * @param[in] keContext Pointer to the key exchange context
  * @param[in] kePayload Pointer to the Key Exchange payload
  * @return Error code
  **/
 
-error_t ikeParseKePayload(IkeSaEntry *sa, const IkeKePayload *kePayload)
+error_t ikeParseKePayload(IkeKeContext *keContext,
+   const IkeKePayload *kePayload)
 {
    error_t error;
    size_t n;
@@ -327,11 +435,11 @@ error_t ikeParseKePayload(IkeSaEntry *sa, const IkeKePayload *kePayload)
    groupNum = ntohs(kePayload->keyExchangeMethod);
 
    //Make sure the key exchange method is acceptable
-   if(groupNum != sa->groupNum)
+   if(groupNum != keContext->groupNum)
       return ERROR_INVALID_GROUP;
 
    //Parse peer's Diffie-Hellman public key
-   error = ikeParseDhPublicKey(sa, kePayload->keyExchangeData, n);
+   error = ikeParsePublicKey(keContext, kePayload->keyExchangeData, n);
 
    //Return status code
    return error;
@@ -354,7 +462,7 @@ error_t ikeParseIdPayload(IkeSaEntry *sa, const IkeIdPayload *idPayload)
 
    //Malformed Identification payload?
    if(n < sizeof(IkeIdPayload))
-      return ERROR_INVALID_MESSAGE;
+      return ERROR_INVALID_SYNTAX;
 
    //Determine the length of the identification data
    n -= sizeof(IkeIdPayload);
@@ -391,7 +499,7 @@ error_t ikeParseCertReqPayload(IkeSaEntry *sa,
 
    //Malformed Identification payload?
    if(n < sizeof(IkeCertReqPayload))
-      return ERROR_INVALID_MESSAGE;
+      return ERROR_INVALID_SYNTAX;
 
    //Determine the length of the Certification Authority field
    n -= sizeof(IkeCertReqPayload);
@@ -424,13 +532,13 @@ error_t ikeParseNoncePayload(const IkeNoncePayload *noncePayload,
 
    //Malformed payload?
    if(n < sizeof(IkeNoncePayload))
-      return ERROR_INVALID_MESSAGE;
+      return ERROR_INVALID_SYNTAX;
 
    //Determine the length of the nonce
    n -= sizeof(IkeNoncePayload);
 
-   //Nonces used in IKEv2 must be at least 128 bits in size (refer to
-   //RFC 7296, section 2.10)
+   //Nonces used in IKEv2 must be at least 128 bits in size (refer to RFC 7296,
+   //section 2.10)
    if(n < IKE_MIN_NONCE_SIZE || n > IKE_MAX_NONCE_SIZE)
       return ERROR_INVALID_LENGTH;
 
@@ -444,122 +552,13 @@ error_t ikeParseNoncePayload(const IkeNoncePayload *noncePayload,
 
 
 /**
- * @brief Parse Delete payload
- * @param[in] sa Pointer to the IKE SA
- * @param[in] deletePayload Pointer to the Delete payload
- * @param[in] response TRUE if the received INFORMATIONAL message is a response
- * @return Error code
- **/
-
-error_t ikeParseDeletePayload(IkeSaEntry *sa,
-   const IkeDeletePayload *deletePayload, bool_t response)
-{
-   uint_t i;
-   size_t n;
-   const uint8_t *spi;
-   IkeChildSaEntry *childSa;
-
-   //Retrieve the length of the Delete payload
-   n = ntohs(deletePayload->header.payloadLength);
-
-   //Malformed payload?
-   if(n < sizeof(IkeDeletePayload))
-      return ERROR_INVALID_MESSAGE;
-
-   //Determine the length of the list
-   n -= sizeof(IkeDeletePayload);
-
-   //Malformed SPI list?
-   if(n != (deletePayload->spiSize * ntohs(deletePayload->numSpi)))
-      return ERROR_INVALID_MESSAGE;
-
-   //Check protocol identifier
-   if(deletePayload->protocolId == IKE_PROTOCOL_ID_IKE)
-   {
-      //The SPI Size field must be zero for IKE
-      if(deletePayload->spiSize != 0)
-         return ERROR_INVALID_MESSAGE;
-
-      //If a peer receives a request to close an IKE SA that it is currently
-      //rekeying, it should reply as usual, and forget about its own rekeying
-      //request (refer to RFC 7296, section 2.25.2)
-
-      //If a peer receives a request to close an IKE SA that it is currently
-      //trying to close, it should reply as usual, and forget about its own
-      //close request
-      if(!response)
-         sa->deleteReceived = TRUE;
-   }
-   else if(deletePayload->protocolId == IKE_PROTOCOL_ID_AH ||
-      deletePayload->protocolId == IKE_PROTOCOL_ID_ESP)
-   {
-      //The SPI Size field must be four for AH and ESP
-      if(deletePayload->spiSize != 4)
-         return ERROR_INVALID_MESSAGE;
-
-      //The Delete payload list the SPIs to be deleted
-      for(i = 0; i < ntohs(deletePayload->numSpi); i++)
-      {
-         //Point to the current SPI
-         spi = deletePayload->spi + (i * deletePayload->spiSize);
-
-         //Perform Child SA lookup
-         childSa = ikeFindChildSaEntry(sa, deletePayload->protocolId, spi);
-
-         //Child SA found?
-         if(childSa != NULL)
-         {
-            //Check the state of the Child SA
-            if(childSa->state == IKE_CHILD_SA_STATE_REKEY)
-            {
-               //If a peer receives a request to close a Child SA that it is currently
-               //rekeying, it should reply as usual, with a Delete payload (refer to
-               //RFC 7296, section 2.25.1)
-               if(!response)
-                  childSa->deleteReceived = TRUE;
-            }
-            else if(childSa->state == IKE_CHILD_SA_STATE_DELETE)
-            {
-               //If a peer receives a request to close a Child SA that it is currently
-               //trying to close, it should reply without a Delete payload
-               if(response)
-                  ikeDeleteChildSaEntry(childSa);
-            }
-            else
-            {
-               //If a peer receives a request to delete a Child SA when it is currently
-               //rekeying the IKE SA, it should reply as usual, with a Delete payload
-               //(refer to RFC 7296, section 2.25.2)
-               if(!response)
-                  childSa->deleteReceived = TRUE;
-            }
-         }
-         else
-         {
-            //If a peer receives a request to close a Child SA that does not exist,
-            //it should reply without a Delete payload (refer to RFC 7296,
-            //section 2.25.1)
-         }
-      }
-   }
-   else
-   {
-      //Unknown protocol identifier
-   }
-
-   //Successful processing
-   return NO_ERROR;
-}
-
-
-/**
  * @brief Parse INVALID_KE_PAYLOAD notification
- * @param[in] sa Pointer to the IKE SA
+ * @param[in] keContext Pointer to the key exchange context
  * @param[in] notifyPayload Pointer to the Notify payload
  * @return Error code
  **/
 
-error_t ikeParseInvalidKeyPayloadNotification(IkeSaEntry *sa,
+error_t ikeParseInvalidKePayloadNotification(IkeKeContext *keContext,
    const IkeNotifyPayload *notifyPayload)
 {
    size_t n;
@@ -572,7 +571,7 @@ error_t ikeParseInvalidKeyPayloadNotification(IkeSaEntry *sa,
 
    //There are two octets of data associated with this notification
    if(n != sizeof(uint16_t))
-      return ERROR_INVALID_MESSAGE;
+      return ERROR_INVALID_SYNTAX;
 
    //Point to the notification data
    data = notifyPayload->spi + notifyPayload->spiSize;
@@ -586,7 +585,7 @@ error_t ikeParseInvalidKeyPayloadNotification(IkeSaEntry *sa,
       return ERROR_INVALID_GROUP;
 
    //Save the corrected group number
-   sa->groupNum = groupNum;
+   keContext->groupNum = groupNum;
 
    //Successful processing
    return NO_ERROR;
@@ -613,7 +612,7 @@ error_t ikeParseCookieNotification(IkeSaEntry *sa,
    //The data associated with this notification must be between 1 and 64
    //octets in length (refer to RFC 7296, section 2.6)
    if(n < IKE_MIN_COOKIE_SIZE || n > IKE_MAX_COOKIE_SIZE)
-      return ERROR_INVALID_MESSAGE;
+      return ERROR_INVALID_SYNTAX;
 
    //Point to the notification data
    data = notifyPayload->spi + notifyPayload->spiSize;
@@ -649,7 +648,7 @@ error_t ikeParseSignHashAlgosNotification(IkeSaEntry *sa,
 
    //Malformed notification?
    if((n % sizeof(uint16_t)) != 0)
-      return ERROR_INVALID_MESSAGE;
+      return ERROR_INVALID_SYNTAX;
 
    //Point to the notification data
    data = notifyPayload->spi + notifyPayload->spiSize;
@@ -681,96 +680,459 @@ error_t ikeParseSignHashAlgosNotification(IkeSaEntry *sa,
 
 
 /**
- * @brief Parse Traffic Selector substructure
- * @param[in] p Pointer to the input data to parse
- * @param[in] length Number of bytes available in the input data
- * @param[out] tsParams Traffic selector parameters
+ * @brief Parse NAT_DETECTION_SOURCE_IP notification
+ * @param[in] sa Pointer to the IKE SA
+ * @param[in] message Pointer to the received IKE message
+ * @param[in] length Length of the IKE message, in bytes
  * @return Error code
  **/
 
-error_t ikeParseTs(const uint8_t *p, size_t length, IkeTsParams *tsParams)
+error_t ikeParseNatDetectSrcIpNotification(IkeSaEntry *sa,
+   const uint8_t *message, size_t length)
 {
+#if (IKE_NAT_TRAVERSAL_SUPPORT == ENABLED)
+   uint_t i;
    size_t n;
+   bool_t match;
+   const uint8_t *data;
+   IkeContext *context;
+   const IkeNotifyPayload *notifyPayload;
+   Sha1Context sha1Context;
+   uint8_t temp[SHA1_DIGEST_SIZE];
+
+   //Point to the IKE context
+   context = sa->context;
+
+   //Initialize variable
+   match = FALSE;
+
+   //There MAY be multiple NAT_DETECTION_SOURCE_IP payloads in a message if the
+   //sender does not know which of several network attachments will be used to
+   //send the packet (refer to RFC 7296, section 2.23)
+   for(i = 0; ; i++)
+   {
+      //Point to the NAT_DETECTION_SOURCE_IP notification
+      notifyPayload = ikeGetStatusNotifyPayload(message, length,
+         IKE_NOTIFY_MSG_TYPE_NAT_DETECTION_SOURCE_IP, i);
+
+      //NAT_DETECTION_SOURCE_IP notification not found?
+      if(notifyPayload == NULL)
+         break;
+
+      //Retrieve the length of the notification data
+      n = ntohs(notifyPayload->header.payloadLength) -
+         sizeof(IkeNotifyPayload) - notifyPayload->spiSize;
+
+      //Malformed notification?
+      if(n != SHA1_DIGEST_SIZE)
+         return ERROR_INVALID_SYNTAX;
+
+      //The data associated with the NAT_DETECTION_SOURCE_IP notification is a
+      //SHA-1 digest of the SPIs (in the order they appear in the header), IP
+      //address, and port from which this packet was sent
+      data = notifyPayload->spi + notifyPayload->spiSize;
+
+      //Retrieve the length of the source IP address
+      n = context->remoteIpAddr.length;
+      //Convert the source port number to network byte order
+      STORE16BE(context->remotePort, temp);
+
+      //Compute the SHA-1 hash of the SPIs, source IP address, and port
+      sha1Init(&sha1Context);
+      sha1Update(&sha1Context, sa->initiatorSpi, IKE_SPI_SIZE);
+      sha1Update(&sha1Context, sa->responderSpi, IKE_SPI_SIZE);
+      sha1Update(&sha1Context, context->remoteIpAddr.addr, n);
+      sha1Update(&sha1Context, temp, sizeof(uint16_t));
+      sha1Final(&sha1Context, temp);
+
+      //Compares the supplied value to the calculated SHA-1 hash
+      if(osMemcmp(data, temp, SHA1_DIGEST_SIZE) == 0)
+      {
+         match = TRUE;
+      }
+   }
+
+   //If none of the NAT_DETECTION_SOURCE_IP payload(s) received matches the
+   //expected value of the source IP and port found from the IP header of the
+   //packet containing the payload, it means that the system sending those
+   //payloads is behind a NAT
+   if(!match)
+   {
+      //A NAT has been detected in front of the remote security endpoint
+      sa->remoteNat = TRUE;
+   }
+
+   //The IKE_SA_INIT message contains a NAT_DETECTION_SOURCE_IP notification
+   sa->natDetectSrcIp = TRUE;
+
+   //Sucessful processing
+   return NO_ERROR;
+#else
+   //Minimal implementations are not required to support NAT traversal
+   return ERROR_NOT_IMPLEMENTED;
+#endif
+}
+
+
+/**
+ * @brief Parse NAT_DETECTION_DESTINATION_IP notification
+ * @param[in] sa Pointer to the IKE SA
+ * @param[in] notifyPayload Pointer to the Notify payload
+ * @return Error code
+ **/
+
+error_t ikeParseNatDetectDestIpNotification(IkeSaEntry *sa,
+   const IkeNotifyPayload *notifyPayload)
+{
+#if (IKE_NAT_TRAVERSAL_SUPPORT == ENABLED)
+   size_t n;
+   const uint8_t *data;
+   IkeContext *context;
+   Sha1Context sha1Context;
+   uint8_t temp[SHA1_DIGEST_SIZE];
+
+   //Point to the IKE context
+   context = sa->context;
+
+   //Retrieve the length of the notification data
+   n = ntohs(notifyPayload->header.payloadLength) - sizeof(IkeNotifyPayload) -
+      notifyPayload->spiSize;
+
+   //Malformed notification?
+   if(n != SHA1_DIGEST_SIZE)
+      return ERROR_INVALID_SYNTAX;
+
+   //The data associated with the NAT_DETECTION_DESTINATION_IP notification is
+   //a SHA-1 digest of the SPIs (in the order they appear in the header), IP
+   //address, and port to which this packet was sent
+   data = notifyPayload->spi + notifyPayload->spiSize;
+
+   //Retrieve the length of the recipient IP address
+   n = context->localIpAddr.length;
+   //Convert the recipient port number to network byte order
+   STORE16BE(context->localPort, temp);
+
+   //Compute the SHA-1 hash of the SPIs, recipient IP address, and port
+   sha1Init(&sha1Context);
+   sha1Update(&sha1Context, sa->initiatorSpi, IKE_SPI_SIZE);
+   sha1Update(&sha1Context, sa->responderSpi, IKE_SPI_SIZE);
+   sha1Update(&sha1Context, context->localIpAddr.addr, n);
+   sha1Update(&sha1Context, temp, sizeof(uint16_t));
+   sha1Final(&sha1Context, temp);
+
+   //In the case of a mismatching NAT_DETECTION_DESTINATION_IP hash, it means
+   //that the system receiving the NAT_DETECTION_DESTINATION_IP payload is
+   //behind a NAT
+   if(osMemcmp(data, temp, SHA1_DIGEST_SIZE) != 0)
+   {
+      //A NAT has been detected in front of the local security endpoint
+      sa->localNat = TRUE;
+
+      //The system should start sending keepalive packets (refer to RFC 7296,
+      //section 2.23)
+      sa->natKeepAliveTimestamp = osGetSystemTime();
+   }
+
+   //The IKE_SA_INIT message contains a NAT_DETECTION_DESTINATION_IP notification
+   sa->natDetectDestIp = TRUE;
+
+   //Sucessful processing
+   return NO_ERROR;
+#else
+   //Minimal implementations are not required to support NAT traversal
+   return ERROR_NOT_IMPLEMENTED;
+#endif
+}
+
+
+/**
+ * @brief Parse Delete payload
+ * @param[in] sa Pointer to the IKE SA
+ * @param[in] deletePayload Pointer to the Delete payload
+ * @param[in] response TRUE if the received INFORMATIONAL message is a response
+ * @return Error code
+ **/
+
+error_t ikeParseDeletePayload(IkeSaEntry *sa,
+   const IkeDeletePayload *deletePayload, bool_t response)
+{
+   uint_t i;
+   size_t n;
+   const uint8_t *spi;
+   IkeChildSaEntry *childSa;
+
+   //Retrieve the length of the Delete payload
+   n = ntohs(deletePayload->header.payloadLength);
+
+   //Malformed payload?
+   if(n < sizeof(IkeDeletePayload))
+      return ERROR_INVALID_SYNTAX;
+
+   //Determine the length of the list
+   n -= sizeof(IkeDeletePayload);
+
+   //Malformed SPI list?
+   if(n != (deletePayload->spiSize * ntohs(deletePayload->numSpi)))
+      return ERROR_INVALID_SYNTAX;
+
+   //Check protocol identifier
+   if(deletePayload->protocolId == IKE_PROTOCOL_ID_IKE)
+   {
+      //The SPI Size field must be zero for IKE
+      if(deletePayload->spiSize != 0)
+         return ERROR_INVALID_SYNTAX;
+
+      //If a peer receives a request to close an IKE SA that it is currently
+      //rekeying, it should reply as usual, and forget about its own rekeying
+      //request (refer to RFC 7296, section 2.25.2)
+
+      //If a peer receives a request to close an IKE SA that it is currently
+      //trying to close, it should reply as usual, and forget about its own
+      //close request
+      if(!response)
+      {
+         sa->deleteReceived = TRUE;
+      }
+   }
+   else if(deletePayload->protocolId == IKE_PROTOCOL_ID_AH ||
+      deletePayload->protocolId == IKE_PROTOCOL_ID_ESP)
+   {
+      //The SPI Size field must be four for AH and ESP
+      if(deletePayload->spiSize != IPSEC_SPI_SIZE)
+         return ERROR_INVALID_SYNTAX;
+
+      //The Delete payload list the SPIs to be deleted
+      for(i = 0; i < ntohs(deletePayload->numSpi); i++)
+      {
+         //Point to the current SPI
+         spi = deletePayload->spi + (i * deletePayload->spiSize);
+
+         //Perform Child SA lookup
+         childSa = ikeFindChildSaEntry(sa, deletePayload->protocolId, spi);
+
+         //Child SA found?
+         if(childSa != NULL)
+         {
+            //Check the state of the Child SA
+            if(childSa->state == IKE_CHILD_SA_STATE_REKEY)
+            {
+               //If a peer receives a request to close a Child SA that it is
+               //currently rekeying, it should reply as usual, with a Delete
+               //payload (refer to RFC 7296, section 2.25.1)
+               if(!response)
+               {
+                  childSa->deleteReceived = TRUE;
+               }
+            }
+            else if(childSa->state == IKE_CHILD_SA_STATE_DELETE)
+            {
+               //If a peer receives a request to close a Child SA that it is
+               //currently trying to close, it should reply without a Delete
+               //payload
+               if(response)
+               {
+                  ikeDeleteChildSaEntry(childSa);
+               }
+            }
+            else
+            {
+               //If a peer receives a request to delete a Child SA when it is
+               //currently rekeying the IKE SA, it should reply as usual, with
+               //a Delete payload (refer to RFC 7296, section 2.25.2)
+               if(!response)
+               {
+                  childSa->deleteReceived = TRUE;
+               }
+            }
+         }
+         else
+         {
+            //If a peer receives a request to close a Child SA that does not
+            //exist, it should reply without a Delete payload (refer to
+            //RFC 7296, section 2.25.1)
+         }
+      }
+   }
+   else
+   {
+      //Unknown protocol identifier
+   }
+
+   //Successful processing
+   return NO_ERROR;
+}
+
+
+/**
+ * @brief Parse Traffic Selector payload
+ * @param[in] tsPayload Pointer to the Traffic Selector payload
+ * @param[in] index Index of the Traffic Selector substructure to parse
+ * @param[out] tsEntry Traffic selector entry
+ * @return Error code
+ **/
+
+error_t ikeParseTsPayload(const IkeTsPayload *tsPayload, uint_t index,
+   IkeTsEntry *tsEntry)
+{
+   error_t error;
+   uint_t i;
+   size_t n;
+   size_t length;
+   const uint8_t *p;
    const IkeTs *ts;
+
+   //Get the length of the TS payload
+   length = ntohs(tsPayload->header.payloadLength);
+
+   //Malformed TS payload?
+   if(length < sizeof(IkeTsPayload))
+      return ERROR_INVALID_SYNTAX;
+
+   //The Traffic Selectors field must contains at least one Traffic Selector
+   //substructure (refer to RFC 7296, section 3.13)
+   if(tsPayload->numTs == 0)
+      return ERROR_INVALID_SYNTAX;
+
+   //Invalid index?
+   if(index >= tsPayload->numTs)
+      return ERROR_NOT_FOUND;
+
+   //Point to the first byte of the Traffic Selectors field
+   p = tsPayload->trafficSelectors;
+   //Determine the length of the Traffic Selectors field
+   length -= sizeof(IkeTsPayload);
+
+   //Loop through the Traffic Selector substructures
+   for(i = 0; i <= index; i++)
+   {
+      //Malformed substructure?
+      if(length < sizeof(IkeTs))
+      {
+         //Report an error
+         error = ERROR_INVALID_SYNTAX;
+         break;
+      }
+
+      //Point to the Traffic Selector substructure
+      ts = (IkeTs *) p;
+
+      //The Selector Length field indicates the length of the Traffic Selector
+      //substructure including the header (refer to RFC 7296, section 3.13.1)
+      n = ntohs(ts->selectorLength);
+
+      //Check the length of the selector
+      if(n < sizeof(IkeTs) || n > length)
+      {
+         //Report an error
+         error = ERROR_INVALID_SYNTAX;
+         break;
+      }
+
+      //Parse Traffic Selector substructure
+      error = ikeParseTsEntry(ts, n, tsEntry);
+      //Any error to report?
+      if(error)
+         break;
+
+      //Jump to the next substructure
+      p += n;
+      length -= n;
+   }
+
+   //Return status code
+   return error;
+}
+
+
+/**
+ * @brief Parse Traffic Selector substructure
+ * @param[in] ts Pointer to the Traffic Selector substructure
+ * @param[in] length Length of the Traffic Selector substructure, in bytes
+ * @param[out] tsEntry Traffic selector entry
+ * @return Error code
+ **/
+
+error_t ikeParseTsEntry(const IkeTs *ts, size_t length, IkeTsEntry *tsEntry)
+{
+   error_t error;
+   size_t n;
 
    //Malformed substructure?
    if(length < sizeof(IkeTs))
-      return ERROR_INVALID_MESSAGE;
+      return ERROR_INVALID_SYNTAX;
 
-   //Point to the Traffic Selector substructure
-   ts = (IkeTs *) p;
-
-   //The Selector Length field indicates the length of the Traffic Selector
-   //substructure including the header
-   n = ntohs(ts->selectorLength);
-
-   //Check the length of the selector
-   if(n < sizeof(IkeTs) || n > length)
-      return ERROR_INVALID_MESSAGE;
+   //Initialize status code
+   error = NO_ERROR;
 
    //The IP protocol ID value specifies the IP protocol ID (such as UDP, TCP,
    //and ICMP). A value of zero means that the protocol ID is not relevant to
    //this Traffic Selector
-   tsParams->ipProtocolId = ts->ipProtocolId;
+   tsEntry->ipProtocolId = ts->ipProtocolId;
 
    //The Start Port value specifies the smallest port number allowed by this
    //Traffic Selector
-   tsParams->startPort = ntohs(ts->startPort);
+   tsEntry->startPort = ntohs(ts->startPort);
 
    //The End Port value specifies the smallest port number allowed by this
    //Traffic Selector
-   tsParams->endPort = ntohs(ts->endPort);
+   tsEntry->endPort = ntohs(ts->endPort);
 
    //The length of the Starting Address and Ending Address fields depends on
    //the TS Type field
-   n -= sizeof(IkeTs);
+   length -= sizeof(IkeTs);
 
 #if (IPV4_SUPPORT == ENABLED)
    //IPv4 address range?
    if(ts->tsType == IKE_TS_TYPE_IPV4_ADDR_RANGE)
    {
       //A range of IPv4 addresses is represented by two four-octet values
-      if(n == (2 * sizeof(Ipv4Addr)))
+      n = sizeof(Ipv4Addr);
+
+      //Valid length?
+      if(length == (2 * n))
       {
          //The Starting Address field specifies the smallest address included
          //in this Traffic Selector
-         tsParams->startAddr.length = sizeof(Ipv4Addr);
-         ipv4CopyAddr(&tsParams->startAddr.ipv4Addr, ts->startAddr);
+         tsEntry->startAddr.length = n;
+         ipv4CopyAddr(&tsEntry->startAddr.ipv4Addr, ts->startAddr);
 
          //The Ending Address field specifies the smallest address included in
          //this Traffic Selector
-         tsParams->endAddr.length = sizeof(Ipv4Addr);
-         ipv4CopyAddr(&tsParams->endAddr.ipv4Addr, ts->startAddr + sizeof(Ipv4Addr));
+         tsEntry->endAddr.length = n;
+         ipv4CopyAddr(&tsEntry->endAddr.ipv4Addr, ts->startAddr + n);
       }
       else
       {
          //Report an error
-         return ERROR_INVALID_ADDRESS;
+         error = ERROR_INVALID_ADDRESS;
       }
    }
    else
 #endif
 #if (IPV6_SUPPORT == ENABLED)
    //IPv6 address range?
-   if(ts->tsType == IKE_TS_TYPE_IPV6_ADDR_RANGE && n == (2 * sizeof(Ipv6Addr)))
+   if(ts->tsType == IKE_TS_TYPE_IPV6_ADDR_RANGE)
    {
       //A range of IPv6 addresses is represented by two sixteen-octet values
-      if(n == (2 * sizeof(Ipv6Addr)))
+      n = sizeof(Ipv6Addr);
+
+      //Valid length?
+      if(length == (2 * n))
       {
          //The Starting Address field specifies the smallest address included
          //in this Traffic Selector
-         tsParams->startAddr.length = sizeof(Ipv4Addr);
-         ipv6CopyAddr(&tsParams->startAddr.ipv6Addr, ts->startAddr);
+         tsEntry->startAddr.length = n;
+         ipv6CopyAddr(&tsEntry->startAddr.ipv6Addr, ts->startAddr);
 
          //The Ending Address field specifies the smallest address included in
          //this Traffic Selector
-         tsParams->endAddr.length = sizeof(Ipv4Addr);
-         ipv6CopyAddr(&tsParams->endAddr.ipv6Addr, ts->startAddr + sizeof(Ipv6Addr));
+         tsEntry->endAddr.length = n;
+         ipv6CopyAddr(&tsEntry->endAddr.ipv6Addr, ts->startAddr + n);
       }
       else
       {
          //Report an error
-         return ERROR_INVALID_ADDRESS;
+         error = ERROR_INVALID_ADDRESS;
       }
    }
    else
@@ -778,11 +1140,11 @@ error_t ikeParseTs(const uint8_t *p, size_t length, IkeTsParams *tsParams)
    //Unknown Traffic Selector type?
    {
       //Report an error
-      return ERROR_INVALID_ADDRESS;
+      error = ERROR_INVALID_ADDRESS;
    }
 
-   //Successful processing
-   return NO_ERROR;
+   //Return status code
+   return error;
 }
 
 
@@ -799,7 +1161,7 @@ error_t ikeParseTs(const uint8_t *p, size_t length, IkeTsParams *tsParams)
 const IkePayloadHeader *ikeGetPayload(const uint8_t *message, size_t length,
    uint8_t type, uint_t index)
 {
-   uint_t k;
+   uint_t i;
    size_t n;
    uint8_t nextPayload;
    const uint8_t *p;
@@ -814,7 +1176,7 @@ const IkePayloadHeader *ikeGetPayload(const uint8_t *message, size_t length,
    nextPayload = ikeHeader->nextPayload;
 
    //Initialize occurrence index
-   k = 0;
+   i = 0;
 
    //Point to the IKE payloads
    p = message + sizeof(IkeHeader);
@@ -841,7 +1203,7 @@ const IkePayloadHeader *ikeGetPayload(const uint8_t *message, size_t length,
       if(nextPayload == type)
       {
          //Matching occurrence found?
-         if(k++ == index)
+         if(i++ == index)
          {
             return payload;
          }
@@ -947,12 +1309,14 @@ const IkeNotifyPayload *ikeGetErrorNotifyPayload(const uint8_t *message,
  * @param[in] message Pointer to the received IKE message
  * @param[in] length Length of the IKE message, in bytes
  * @param[in] type Notify message type
+ * @param[in] index Notification occurrence index
  * @return Pointer to the error Notify payload, if any
  **/
 
 const IkeNotifyPayload *ikeGetStatusNotifyPayload(const uint8_t *message,
-   size_t length, uint16_t type)
+   size_t length, uint16_t type, uint_t index)
 {
+   uint_t i;
    size_t n;
    uint8_t nextPayload;
    const uint8_t *p;
@@ -966,6 +1330,9 @@ const IkeNotifyPayload *ikeGetStatusNotifyPayload(const uint8_t *message,
    //The Next Payload field indicates the type of payload that immediately
    //follows the header
    nextPayload = ikeHeader->nextPayload;
+
+   //Initialize occurrence index
+   i = 0;
 
    //Point to the IKE payloads
    p = message + sizeof(IkeHeader);
@@ -1005,7 +1372,11 @@ const IkeNotifyPayload *ikeGetStatusNotifyPayload(const uint8_t *message,
          //Check the type of the notification message
          if(ntohs(notifyPayload->notifyMsgType) == type)
          {
-            return notifyPayload;
+            //Matching occurrence found?
+            if(i++ == index)
+            {
+               return notifyPayload;
+            }
          }
       }
 
@@ -1046,7 +1417,7 @@ error_t ikeCheckCriticalPayloads(const uint8_t *message, size_t length,
 
    //Check the length of the IKE message
    if(length < ntohl(ikeHeader->length))
-      return ERROR_INVALID_MESSAGE;
+      return ERROR_INVALID_SYNTAX;
 
    //The Next Payload field indicates the type of payload that immediately
    //follows the header
@@ -1063,7 +1434,7 @@ error_t ikeCheckCriticalPayloads(const uint8_t *message, size_t length,
    {
       //Malformed IKE message?
       if(length < sizeof(IkePayloadHeader))
-         return ERROR_INVALID_MESSAGE;
+         return ERROR_INVALID_SYNTAX;
 
       //Each IKE payload begins with a generic payload header
       payload = (IkePayloadHeader *) p;
@@ -1074,7 +1445,7 @@ error_t ikeCheckCriticalPayloads(const uint8_t *message, size_t length,
 
       //Check the length of the IKE payload
       if(n < sizeof(IkePayloadHeader) || n > length)
-         return ERROR_INVALID_MESSAGE;
+         return ERROR_INVALID_SYNTAX;
 
       //Check whether the critical flag is set
       if(payload->critical)

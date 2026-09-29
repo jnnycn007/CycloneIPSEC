@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 //Switch to the appropriate trace level
@@ -82,6 +82,18 @@ error_t espEncryptPacket(IpsecContext *context, IpsecSadEntry *sa,
    //encryption (refer to RFC 4303, section 3.4.2)
    cipherAlgo = sa->cipherAlgo;
 
+#if (ESP_NULL_SUPPORT == ENABLED)
+   //Integrity-only ESP?
+   if(sa->cipherMode == CIPHER_MODE_NULL)
+   {
+      //No confidentiality is offered by using the NULL encryption algorithm
+      error = espComputeChecksum(context, sa, espHeader, payload, length, icv);
+      //Any error to report?
+      if(error)
+         return error;
+   }
+   else
+#endif
 #if (ESP_CBC_SUPPORT == ENABLED)
    //CBC cipher mode?
    if(sa->cipherMode == CIPHER_MODE_CBC)
@@ -328,6 +340,69 @@ error_t espEncryptPacket(IpsecContext *context, IpsecSadEntry *sa,
    }
    else
 #endif
+#if (ESP_NULL_SUPPORT == ENABLED && ESP_GMAC_SUPPORT == ENABLED)
+   //GMAC authentication algorithm?
+   if(sa->cipherMode == CIPHER_MODE_GMAC)
+   {
+      uint8_t temp[8];
+      uint8_t nonce[12];
+      GmacContext gmacContext;
+
+      //For a given key, the IV must not repeat. The encrypter can use any IV
+      //generation method that meets the uniqueness requirement, without
+      //coordinating with the receiver (refer to RFC 4543, section 3.1)
+      espGenerateIv(sa->iv);
+
+      //The Initialization Vector (IV) must be eight octets
+      osMemcpy(payload, sa->iv, 8);
+
+      //The components of the nonce are the salt with the IV (refer to RFC 4543,
+      //section 3.2)
+      osMemcpy(nonce, sa->encKey + sa->encKeyLen, 4);
+      osMemcpy(nonce + 4, sa->iv, 8);
+
+      //Initialize GMAC context
+      error = gmacInit(&gmacContext, sa->cipherAlgo, sa->encKey, sa->encKeyLen);
+      //Any error to report?
+      if(error)
+         return error;
+
+      //The nonce is passed to the AES-GMAC authentication algorithm
+      error = gmacReset(&gmacContext, nonce, 12);
+      //Any error to report?
+      if(error)
+         return error;
+
+      //Two formats of the AAD are defined (refer to RFC 4543, section 3.3)
+      if(sa->esn)
+      {
+         //Convert the 64-bit sequence number to network byte order
+         STORE64BE(sa->seqNum, temp);
+
+         //The AAD consists of the SPI, 64-bit sequence number, and ESP payload
+         gmacUpdate(&gmacContext, (uint8_t *) &espHeader->spi, 4);
+         gmacUpdate(&gmacContext, temp, 8);
+         gmacUpdate(&gmacContext, sa->iv, 8);
+         gmacUpdate(&gmacContext, data, length);
+      }
+      else
+      {
+         //The AAD consists of the SPI, 32-bit sequence number, and ESP payload
+         gmacUpdate(&gmacContext, espHeader, sizeof(EspHeader));
+         gmacUpdate(&gmacContext, sa->iv, 8);
+         gmacUpdate(&gmacContext, data, length);
+      }
+
+      //The authentication tag must not be truncated, so the length of the ICV
+      //is 16 octets (refer to RFC 4543, section 3.4)
+      error = gmacFinal(&gmacContext, icv, sa->icvLen);
+      //Any error to report?
+      if(error)
+         return error;
+
+   }
+   else
+#endif
    //Invalid cipher mode?
    {
       //The specified cipher mode is not supported
@@ -361,12 +436,12 @@ error_t espComputeChecksum(IpsecContext *context, IpsecSadEntry *sa,
 
 #if (ESP_CMAC_SUPPORT == ENABLED)
    //CMAC integrity algorithm?
-   if(sa->authCipherAlgo != NULL)
+   if(sa->authMacAlgo == MAC_ALGO_CMAC)
    {
       CmacContext *cmacContext;
 
       //Point to the CMAC context
-      cmacContext = &context->cmacContext;
+      cmacContext = &context->macContext.cmacContext;
 
       //The SAD entry specifies the algorithm employed for ICV computation
       error = cmacInit(cmacContext, sa->authCipherAlgo, sa->authKey,
@@ -398,12 +473,12 @@ error_t espComputeChecksum(IpsecContext *context, IpsecSadEntry *sa,
 #endif
 #if (ESP_HMAC_SUPPORT == ENABLED)
    //HMAC integrity algorithm?
-   if(sa->authHashAlgo != NULL)
+   if(sa->authMacAlgo == MAC_ALGO_HMAC)
    {
       HmacContext *hmacContext;
 
       //Point to the HMAC context
-      hmacContext = &context->hmacContext;
+      hmacContext = &context->macContext.hmacContext;
 
       //The SAD entry specifies the algorithm employed for ICV computation
       error = hmacInit(hmacContext, sa->authHashAlgo, sa->authKey,

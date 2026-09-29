@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 //Switch to the appropriate trace level
@@ -37,6 +37,7 @@
 #include "ike/ike_sign_misc.h"
 #include "ike/ike_key_material.h"
 #include "encoding/oid.h"
+#include "kdf/ike_kdf.h"
 #include "debug.h"
 
 //Check IKEv2 library configuration
@@ -323,7 +324,7 @@ error_t ikeSelectSignAlgoId(IkeCertType certType, const HashAlgo *hashAlgo,
    //RSA-PSS signature algorithm?
    if(certType == IKE_CERT_TYPE_RSA_PSS)
    {
-      //Valid hash algorithm?
+      //SHA-1, SHA-256, SHA-384 or SHA-512 hash algorithm?
       if(hashAlgo != NULL)
       {
          //Set the OID of the signature algorithm
@@ -802,15 +803,15 @@ const HashAlgo *ikeSelectSignHashAlgo(IkeSaEntry *sa,
  * @param[in] id MAC authentication data
  * @param[in] idLen MAC authentication data
  * @param[out] macId Temporary buffer needed to calculate MACedID
- * @param[out] messageChunks Array of data chunks representing the message
- *   to be signed
+ * @param[out] messageFrags Array of fragments representing the message to be
+ *   signed
  * @param[in] initiator Specifies whether the digest is performed at initiator
  *   or responder side
  * @return Error code
  **/
 
 error_t ikeGetSignedOctets(IkeSaEntry *sa, const uint8_t *id, size_t idLen,
-   uint8_t *macId, DataChunk *messageChunks, bool_t initiator)
+   uint8_t *macId, DataFrag *messageFrags, bool_t initiator)
 {
    error_t error;
 
@@ -818,47 +819,48 @@ error_t ikeGetSignedOctets(IkeSaEntry *sa, const uint8_t *id, size_t idLen,
    if(initiator)
    {
       //Compute prf(SK_pi, IDi')
-      error = ikeComputePrf(sa, sa->skpi, sa->prfKeyLen, id, idLen,
-         macId);
+      error = ikePrf(sa->prfMacAlgo, sa->prfHashAlgo, sa->prfCipherAlgo,
+         sa->skpi, sa->prfKeyLen, id, idLen, macId);
 
       //Check status code
       if(!error)
       {
-         //The initiator signs the first message (IKE_SA_INIT request),
-         //starting with the first octet of the first SPI in the header
-         //and ending with the last octet of the last payload
-         messageChunks[0].buffer = sa->initiatorSaInit;
-         messageChunks[0].length = sa->initiatorSaInitLen;
+         //The initiator signs the first message (IKE_SA_INIT request), starting
+         //with the first octet of the first SPI in the header and ending with
+         //the last octet of the last payload
+         messageFrags[0].buffer = sa->initiatorSaInit;
+         messageFrags[0].length = sa->initiatorSaInitLen;
 
-         //Appended to this (for purposes of computing the signature)
-         //are the responder's nonce Nr, and the value prf(SK_pi, IDi')
-         messageChunks[1].buffer = sa->responderNonce;
-         messageChunks[1].length = sa->responderNonceLen;
-         messageChunks[2].buffer = macId;
-         messageChunks[2].length = sa->prfKeyLen;
+         //Appended to this (for purposes of computing the signature) are the
+         //responder's nonce Nr, and the value prf(SK_pi, IDi')
+         messageFrags[1].buffer = sa->responderNonce;
+         messageFrags[1].length = sa->responderNonceLen;
+         messageFrags[2].buffer = macId;
+         messageFrags[2].length = sa->prfKeyLen;
       }
    }
    else
    {
       //Compute prf(SK_pr, IDr')
-      error = ikeComputePrf(sa, sa->skpr, sa->prfKeyLen, id, idLen, macId);
+      error = ikePrf(sa->prfMacAlgo, sa->prfHashAlgo, sa->prfCipherAlgo,
+         sa->skpr, sa->prfKeyLen, id, idLen, macId);
 
       //Check status code
       if(!error)
       {
-         //For the responder, the octets to be signed start with the
-         //first octet of the first SPI in the header of the second
-         //message (IKE_SA_INIT response) and end with the last octet
-         //of the last payload in the second message
-         messageChunks[0].buffer = sa->responderSaInit;
-         messageChunks[0].length = sa->responderSaInitLen;
+         //For the responder, the octets to be signed start with the first octet
+         //of the first SPI in the header of the second message (IKE_SA_INIT
+         //response) and end with the last octet of the last payload in the
+         //second message
+         messageFrags[0].buffer = sa->responderSaInit;
+         messageFrags[0].length = sa->responderSaInitLen;
 
-         //Appended to this (for purposes of computing the signature)
-         //are the initiator's nonce Ni, and the value prf(SK_pr, IDr')
-         messageChunks[1].buffer = sa->initiatorNonce;
-         messageChunks[1].length = sa->initiatorNonceLen;
-         messageChunks[2].buffer = macId;
-         messageChunks[2].length = sa->prfKeyLen;
+         //Appended to this (for purposes of computing the signature) are the
+         //initiator's nonce Ni, and the value prf(SK_pr, IDr')
+         messageFrags[1].buffer = sa->initiatorNonce;
+         messageFrags[1].length = sa->initiatorNonceLen;
+         messageFrags[2].buffer = macId;
+         messageFrags[2].length = sa->prfKeyLen;
       }
    }
 
@@ -890,7 +892,8 @@ error_t ikeDigestSignedOctets(IkeSaEntry *sa, const HashAlgo *hashAlgo,
    if(initiator)
    {
       //Compute prf(SK_pi, IDi')
-      error = ikeComputePrf(sa, sa->skpi, sa->prfKeyLen, id, idLen, macId);
+      error = ikePrf(sa->prfMacAlgo, sa->prfHashAlgo, sa->prfCipherAlgo,
+         sa->skpi, sa->prfKeyLen, id, idLen, macId);
 
       //Check status code
       if(!error)
@@ -911,7 +914,8 @@ error_t ikeDigestSignedOctets(IkeSaEntry *sa, const HashAlgo *hashAlgo,
    else
    {
       //Compute prf(SK_pr, IDr')
-      error = ikeComputePrf(sa, sa->skpr, sa->prfKeyLen, id, idLen, macId);
+      error = ikePrf(sa->prfMacAlgo, sa->prfHashAlgo, sa->prfCipherAlgo,
+         sa->skpr, sa->prfKeyLen, id, idLen, macId);
 
       //Check status code
       if(!error)

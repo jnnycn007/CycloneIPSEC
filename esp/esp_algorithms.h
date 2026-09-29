@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 #ifndef _ESP_ALGORITHMS_H
@@ -47,29 +47,32 @@ error_t espSelectEncAlgo(IkeChildSaEntry *childSa, uint16_t encAlgoId,
 
 error_t espSelectAuthAlgo(IkeChildSaEntry *childSa, uint16_t authAlgoId);
 
-error_t espAddSupportedTransforms(IkeContext *context, IkeProposal *proposal,
-   uint8_t **lastSubstruc);
-
-error_t espAddSupportedEncTransforms(IkeContext *context,
+error_t espAddSupportedTransforms(IkeChildSaEntry *childSa,
    IkeProposal *proposal, uint8_t **lastSubstruc);
 
-error_t espAddSupportedAuthTransforms(IkeContext *context,
+error_t espAddSupportedEncTransforms(IkeChildSaEntry *childSa,
    IkeProposal *proposal, uint8_t **lastSubstruc);
 
-error_t espAddSupportedEsnTransforms(IkeContext *context,
+error_t espAddSupportedAuthTransforms(IkeChildSaEntry *childSa,
    IkeProposal *proposal, uint8_t **lastSubstruc);
 
-const IkeEncAlgo *espSelectEncTransform(IkeContext *context,
+error_t espAddSupportedEsnTransforms(IkeChildSaEntry *childSa,
+   IkeProposal *proposal, uint8_t **lastSubstruc);
+
+const IkeEncAlgo *espSelectEncTransform(IkeChildSaEntry *childSa,
    const IkeProposal *proposal, size_t proposalLen);
 
-uint16_t espSelectAuthTransform(IkeContext *context, const IkeProposal *proposal,
-   size_t proposalLen);
+uint16_t espSelectAuthTransform(IkeChildSaEntry *childSa,
+   const IkeProposal *proposal, size_t proposalLen);
 
-uint16_t espSelectEsnTransform(IkeContext *context, const IkeProposal *proposal,
-   size_t proposalLen);
+uint16_t espSelectEsnTransform(IkeChildSaEntry *childSa,
+   const IkeProposal *proposal, size_t proposalLen);
 
-error_t espSelectSaProposal(IkeChildSaEntry *childSa, const IkeSaPayload *payload);
-error_t espCheckSaProposal(IkeChildSaEntry *childSa, const IkeSaPayload *payload);
+error_t espSelectSaProposal(IkeChildSaEntry *childSa,
+   const IkeSaPayload *payload);
+
+error_t espCheckSaProposal(IkeChildSaEntry *childSa,
+   const IkeSaPayload *payload);
 
 //C++ guard
 #ifdef __cplusplus

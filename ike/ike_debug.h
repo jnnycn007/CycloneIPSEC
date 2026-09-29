@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 #ifndef _IKE_DEBUG_H
@@ -87,6 +87,8 @@ void ikeDumpAuthPayload(const IkeAuthPayload *payload, size_t length);
 void ikeDumpNoncePayload(const IkeNoncePayload *payload, size_t length);
 
 void ikeDumpNotifyPayload(const IkeNotifyPayload *payload, size_t length);
+void ikeDumpInvalidKePayloadNotification(const uint8_t *data, size_t length);
+void ikeDumpSignHashAlgosNotification(const uint8_t *data, size_t length);
 
 void ikeDumpDeletePayload(const IkeDeletePayload *payload, size_t length);
 

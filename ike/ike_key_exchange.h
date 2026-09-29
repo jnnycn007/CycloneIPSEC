@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 #ifndef _IKE_KEY_EXCHANGE_H
@@ -40,13 +40,20 @@ extern "C" {
 #endif
 
 //IKE related functions
-void ikeInitDhContext(IkeSaEntry *sa);
-void ikeFreeDhContext(IkeSaEntry *sa);
+void ikeInitKeContext(IkeKeContext *keContext);
+void ikeFreeKeContext(IkeKeContext *keContext);
 
-error_t ikeGenerateDhKeyPair(IkeSaEntry *sa);
-error_t ikeComputeDhSharedSecret(IkeSaEntry *sa);
-error_t ikeFormatDhPublicKey(IkeSaEntry *sa, uint8_t *p, size_t *written);
-error_t ikeParseDhPublicKey(IkeSaEntry *sa, const uint8_t *p, size_t length);
+error_t ikeGenerateKeyPair(IkeKeContext *keContext, const PrngAlgo *prngAlgo,
+   void *prngContext);
+
+error_t ikeComputeSharedSecret(IkeKeContext *keContext, uint8_t *output,
+   size_t *outputLen);
+
+error_t ikeFormatPublicKey(IkeKeContext *keContext, uint8_t *p,
+   size_t *written);
+
+error_t ikeParsePublicKey(IkeKeContext *keContext, const uint8_t *p,
+   size_t length);
 
 //C++ guard
 #ifdef __cplusplus

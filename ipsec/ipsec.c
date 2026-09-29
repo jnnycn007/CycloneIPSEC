@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 //Switch to the appropriate trace level
@@ -231,6 +231,7 @@ error_t ipsecSetSadEntry(IpsecContext *context, uint_t index,
    entry->protocol = params->protocol;
    entry->selector = params->selector;
    entry->spi = params->spi;
+   entry->authMacAlgo = params->authMacAlgo;
    entry->authCipherAlgo = params->authCipherAlgo;
    entry->authHashAlgo = params->authHashAlgo;
    entry->authKeyLen = params->authKeyLen;
@@ -261,6 +262,11 @@ error_t ipsecSetSadEntry(IpsecContext *context, uint_t index,
       //Copy initialization vector
       osMemcpy(entry->iv, params->iv, params->ivLen);
    }
+#endif
+
+#if (ESP_SUPPORT == ENABLED && ESP_UDP_ENCAPS_SUPPORT == ENABLED)
+   //UDP encapsulation of IPsec ESP packets
+   entry->udpEncapsulation = params->udpEncapsulation;
 #endif
 
    //ESP and AH SA use secret keys that should be used only for a limited

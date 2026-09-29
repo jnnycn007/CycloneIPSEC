@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 //Switch to the appropriate trace level
@@ -422,9 +422,9 @@ error_t ikeVerifyRsaPssSignature(IkeSaEntry *sa, const uint8_t *id,
       //Check status code
       if(!error)
       {
-         //Verify RSA signature (RSASSA-PKCS1-v1_5 signature scheme)
-         error = rsassaPssVerify(&rsaPublicKey, hashAlgo, saltLen, digest,
-            signature, signatureLen);
+         //Verify RSA signature (RSASSA-PSS signature scheme)
+         error = rsassaPssVerify(&rsaPublicKey, hashAlgo, hashAlgo, saltLen,
+            digest, signature, signatureLen);
       }
 
       //Free previously allocated memory
@@ -650,7 +650,7 @@ error_t ikeVerifyEd25519Signature(IkeSaEntry *sa, const uint8_t *id,
 {
 #if (IKE_ED25519_SIGN_SUPPORT == ENABLED)
    error_t error;
-   DataChunk messageChunks[3];
+   DataFrag messageFrags[3];
    uint8_t macId[IKE_MAX_DIGEST_SIZE];
 
    //Check public key identifier
@@ -666,7 +666,7 @@ error_t ikeVerifyEd25519Signature(IkeSaEntry *sa, const uint8_t *id,
          {
             //Data to be signed is run through the EdDSA algorithm without
             //pre-hashing
-            error = ikeGetSignedOctets(sa, id, idLen, macId, messageChunks,
+            error = ikeGetSignedOctets(sa, id, idLen, macId, messageFrags,
                !sa->originalInitiator);
 
             //Check status code
@@ -674,7 +674,7 @@ error_t ikeVerifyEd25519Signature(IkeSaEntry *sa, const uint8_t *id,
             {
                //Verify Ed25519 signature (PureEdDSA mode)
                error = ed25519VerifySignatureEx(publicKeyInfo->ecPublicKey.q.value,
-                  messageChunks, arraysize(messageChunks), NULL, 0, 0, signature);
+                  messageFrags, arraysize(messageFrags), NULL, 0, 0, signature);
             }
          }
          else
@@ -721,7 +721,7 @@ error_t ikeVerifyEd448Signature(IkeSaEntry *sa, const uint8_t *id,
 {
 #if (IKE_ED448_SIGN_SUPPORT == ENABLED)
    error_t error;
-   DataChunk messageChunks[3];
+   DataFrag messageFrags[3];
    uint8_t macId[IKE_MAX_DIGEST_SIZE];
 
    //Check public key identifier
@@ -737,7 +737,7 @@ error_t ikeVerifyEd448Signature(IkeSaEntry *sa, const uint8_t *id,
          {
             //Data to be signed is run through the EdDSA algorithm without
             //pre-hashing
-            error = ikeGetSignedOctets(sa, id, idLen, macId, messageChunks,
+            error = ikeGetSignedOctets(sa, id, idLen, macId, messageFrags,
                !sa->originalInitiator);
 
             //Check status code
@@ -745,7 +745,7 @@ error_t ikeVerifyEd448Signature(IkeSaEntry *sa, const uint8_t *id,
             {
                //Verify Ed448 signature (PureEdDSA mode)
                error = ed448VerifySignatureEx(publicKeyInfo->ecPublicKey.q.value,
-                  messageChunks, arraysize(messageChunks), NULL, 0, 0, signature);
+                  messageFrags, arraysize(messageFrags), NULL, 0, 0, signature);
             }
          }
          else

@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 //Switch to the appropriate trace level
@@ -89,6 +89,19 @@ error_t espDecryptPacket(IpsecContext *context, IpsecSadEntry *sa,
    //decryption (refer to RFC 4303, section 3.4.2)
    cipherAlgo = sa->cipherAlgo;
 
+#if (ESP_NULL_SUPPORT == ENABLED)
+   //Integrity-only ESP?
+   if(sa->cipherMode == CIPHER_MODE_NULL)
+   {
+      //No confidentiality is offered by using the NULL encryption algorithm
+      error = espVerifyChecksum(context, sa, espHeader, context->buffer, length,
+         icv);
+      //Any error to report?
+      if(error)
+         return error;
+   }
+   else
+#endif
 #if (ESP_CBC_SUPPORT == ENABLED)
    //CBC cipher mode?
    if(sa->cipherMode == CIPHER_MODE_CBC)
@@ -300,6 +313,78 @@ error_t espDecryptPacket(IpsecContext *context, IpsecSadEntry *sa,
    }
    else
 #endif
+#if (ESP_NULL_SUPPORT == ENABLED && ESP_GMAC_SUPPORT == ENABLED)
+   //GMAC authentication algorithm?
+   if(sa->cipherMode == CIPHER_MODE_GMAC)
+   {
+      size_t i;
+      uint8_t mask;
+      uint8_t temp[16];
+      uint8_t nonce[12];
+      GmacContext gmacContext;
+
+      //The components of the nonce are the salt with the IV (refer to RFC 4543,
+      //section 3.2)
+      osMemcpy(nonce, sa->encKey + sa->encKeyLen, 4);
+      osMemcpy(nonce + 4, iv, 8);
+
+      //Initialize GMAC context
+      error = gmacInit(&gmacContext, sa->cipherAlgo, sa->encKey, sa->encKeyLen);
+      //Any error to report?
+      if(error)
+         return error;
+
+      //The nonce is passed to the AES-GMAC authentication algorithm
+      error = gmacReset(&gmacContext, nonce, 12);
+      //Any error to report?
+      if(error)
+         return error;
+
+      //Two formats of the AAD are defined (refer to RFC 4543, section 3.3)
+      if(sa->esn)
+      {
+         //Reconstruct the 64-bit sequence number
+         uint64_t seq = ipsecGetSeqNum(sa, ntohl(espHeader->seqNum));
+
+         //Convert the 64-bit sequence number to network byte order
+         STORE64BE(seq, temp);
+
+         //The AAD consists of the SPI, 64-bit sequence number, and ESP payload
+         gmacUpdate(&gmacContext, (uint8_t *) &espHeader->spi, 4);
+         gmacUpdate(&gmacContext, temp, 8);
+         gmacUpdate(&gmacContext, iv, 8);
+         gmacUpdate(&gmacContext, data, length);
+      }
+      else
+      {
+         //The AAD consists of the SPI, 32-bit sequence number, and ESP payload
+         gmacUpdate(&gmacContext, espHeader, sizeof(EspHeader));
+         gmacUpdate(&gmacContext, iv, 8);
+         gmacUpdate(&gmacContext, data, length);
+      }
+
+      //Finalize GMAC computation
+      error = gmacFinal(&gmacContext, temp, sa->icvLen);
+      //Any error to report?
+      if(error)
+         return error;
+
+      //The computed ICV is bitwise compared to the received ICV
+      for(mask = 0, i = 0; i < sa->icvLen; i++)
+      {
+         mask |= temp[i] ^ icv[i];
+      }
+
+      //If the computed and received ICVs match, then the datagram is valid,
+      //and it is accepted (refer to RFC 4303, section 3.4.4.1)
+      if(mask != 0)
+         return ERROR_DECRYPTION_FAILED;
+
+      //Copy payload data
+      osMemcpy(payload, data, length);
+   }
+   else
+#endif
    //Invalid cipher mode?
    {
       //The specified cipher mode is not supported
@@ -357,12 +442,12 @@ error_t espVerifyChecksum(IpsecContext *context, IpsecSadEntry *sa,
 
 #if (ESP_CMAC_SUPPORT == ENABLED)
    //CMAC integrity algorithm?
-   if(sa->authCipherAlgo != NULL)
+   if(sa->authMacAlgo == MAC_ALGO_CMAC)
    {
       CmacContext *cmacContext;
 
       //Point to the CMAC context
-      cmacContext = &context->cmacContext;
+      cmacContext = &context->macContext.cmacContext;
 
       //The SAD entry specifies the algorithms and keys to be employed for
       //decryption and ICV computation (refer to RFC 4303, section 3.4.2)
@@ -400,12 +485,12 @@ error_t espVerifyChecksum(IpsecContext *context, IpsecSadEntry *sa,
 #endif
 #if (ESP_HMAC_SUPPORT == ENABLED)
    //HMAC integrity algorithm?
-   if(sa->authHashAlgo != NULL)
+   if(sa->authMacAlgo == MAC_ALGO_HMAC)
    {
       HmacContext *hmacContext;
 
       //Point to the HMAC context
-      hmacContext = &context->hmacContext;
+      hmacContext = &context->macContext.hmacContext;
 
       //The SAD entry specifies the algorithms and keys to be employed for
       //decryption and ICV computation (refer to RFC 4303, section 3.4.2)

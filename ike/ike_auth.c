@@ -25,7 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * @author Oryx Embedded SARL (www.oryx-embedded.com)
- * @version 2.6.4
+ * @version 2.6.6
  **/
 
 //Switch to the appropriate trace level
@@ -39,6 +39,7 @@
 #include "ike/ike_key_material.h"
 #include "encoding/asn1.h"
 #include "encoding/oid.h"
+#include "kdf/ike_kdf.h"
 #include "pkix/x509_cert_parse.h"
 #include "debug.h"
 
@@ -314,9 +315,11 @@ error_t ikeComputeMacAuth(IkeSaEntry *sa, const uint8_t *key, size_t keyLen,
    error_t error;
    uint8_t macId[IKE_MAX_DIGEST_SIZE];
    uint8_t macKey[IKE_MAX_DIGEST_SIZE];
+   DataFrag dataFrags[3];
 
    //Derive the shared secret from the password
-   error = ikeComputePrf(sa, key, keyLen, "Key Pad for IKEv2", 17, macKey);
+   error = ikePrf(sa->prfMacAlgo, sa->prfHashAlgo, sa->prfCipherAlgo, key,
+      keyLen, "Key Pad for IKEv2", 17, macKey);
 
    //Check whether the calculation is performed at initiator side
    if(initiator)
@@ -325,14 +328,8 @@ error_t ikeComputeMacAuth(IkeSaEntry *sa, const uint8_t *key, size_t keyLen,
       if(!error)
       {
          //Compute prf(SK_pi, IDi')
-         error = ikeComputePrf(sa, sa->skpi, sa->prfKeyLen, id, idLen, macId);
-      }
-
-      //Check status code
-      if(!error)
-      {
-         //Initialize PRF calculation
-         error = ikeInitPrf(sa, macKey, sa->prfKeyLen);
+         error = ikePrf(sa->prfMacAlgo, sa->prfHashAlgo, sa->prfCipherAlgo,
+            sa->skpi, sa->prfKeyLen, id, idLen, macId);
       }
 
       //Check status code
@@ -340,16 +337,19 @@ error_t ikeComputeMacAuth(IkeSaEntry *sa, const uint8_t *key, size_t keyLen,
       {
          //The initiator signs the first message (IKE_SA_INIT request), starting
          //with the first octet of the first SPI in the header and ending with
-         //the last octet of the last payload
-         ikeUpdatePrf(sa, sa->initiatorSaInit, sa->initiatorSaInitLen);
+         //the last octet of the last payload. Appended to this (for purposes of
+         //computing the signature) are the responder's nonce Nr, and the value
+         //prf(SK_pi, IDi')
+         dataFrags[0].buffer = sa->initiatorSaInit;
+         dataFrags[0].length = sa->initiatorSaInitLen;
+         dataFrags[1].buffer = sa->responderNonce;
+         dataFrags[1].length = sa->responderNonceLen;
+         dataFrags[2].buffer = macId;
+         dataFrags[2].length = sa->prfKeyLen;
 
-         //Appended to this (for purposes of computing the signature) are the
-         //responder's nonce Nr, and the value prf(SK_pi, IDi')
-         ikeUpdatePrf(sa, sa->responderNonce, sa->responderNonceLen);
-         ikeUpdatePrf(sa, macId, sa->prfKeyLen);
-
-         //Finalize PRF calculation
-         error = ikeFinalizePrf(sa, mac);
+         //Compute the AUTH value
+         error = ikePrfEx(sa->prfMacAlgo, sa->prfHashAlgo, sa->prfCipherAlgo,
+            macKey, sa->prfKeyLen, dataFrags, arraysize(dataFrags), mac);
       }
    }
    else
@@ -358,14 +358,8 @@ error_t ikeComputeMacAuth(IkeSaEntry *sa, const uint8_t *key, size_t keyLen,
       if(!error)
       {
          //Compute prf(SK_pr, IDr')
-         error = ikeComputePrf(sa, sa->skpr, sa->prfKeyLen, id, idLen, macId);
-      }
-
-      //Check status code
-      if(!error)
-      {
-         //Initialize PRF calculation
-         error = ikeInitPrf(sa, macKey, sa->prfKeyLen);
+         error = ikePrf(sa->prfMacAlgo, sa->prfHashAlgo, sa->prfCipherAlgo,
+            sa->skpr, sa->prfKeyLen, id, idLen, macId);
       }
 
       //Check status code
@@ -374,16 +368,18 @@ error_t ikeComputeMacAuth(IkeSaEntry *sa, const uint8_t *key, size_t keyLen,
          //For the responder, the octets to be signed start with the first octet
          //of the first SPI in the header of the second message (IKE_SA_INIT
          //response) and end with the last octet of the last payload in the
-         //second message
-         ikeUpdatePrf(sa, sa->responderSaInit, sa->responderSaInitLen);
+         //second message. Appended to this (for purposes of computing the
+         //signature) are the initiator's nonce Ni, and the value prf(SK_pr, IDr')
+         dataFrags[0].buffer = sa->responderSaInit;
+         dataFrags[0].length = sa->responderSaInitLen;
+         dataFrags[1].buffer = sa->initiatorNonce;
+         dataFrags[1].length = sa->initiatorNonceLen;
+         dataFrags[2].buffer = macId;
+         dataFrags[2].length = sa->prfKeyLen;
 
-         //Appended to this (for purposes of computing the signature) are the
-         //initiator's nonce Ni, and the value prf(SK_pr, IDr')
-         ikeUpdatePrf(sa, sa->initiatorNonce, sa->initiatorNonceLen);
-         ikeUpdatePrf(sa, macId, sa->prfKeyLen);
-
-         //Finalize PRF calculation
-         error = ikeFinalizePrf(sa, mac);
+         //Compute the AUTH value
+         error = ikePrfEx(sa->prfMacAlgo, sa->prfHashAlgo, sa->prfCipherAlgo,
+            macKey, sa->prfKeyLen, dataFrags, arraysize(dataFrags), mac);
       }
    }
 
